@@ -1,0 +1,25 @@
+---
+title: "lab_block_2"
+author: "Aron, Sergey, Shahin"
+date: "2025-11-14"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+## R Markdown
+
+Prepare data
+
+```{r cars, echo=FALSE}
+summary(cars)
+```
+
+## Appendix
+
+All code
+
+```{r, ref.label=setdiff(knitr::all_labels(), c('setup')), echo=TRUE, eval=FALSE}
+```
