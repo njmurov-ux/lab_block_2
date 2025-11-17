@@ -13,10 +13,159 @@ knitr::opts_chunk$set(echo = FALSE)
 
 ## Assignment 2
 
-Prepare data
 
-```{r cars, echo=FALSE}
-summary(cars)
+```{r task_2_functions}
+
+# TASK 2 CODE
+
+Loglikelihood <- function(theta, sigma, X, y) {
+
+  stopifnot(length(theta) == ncol(X) + 1)
+  stopifnot(is.numeric(sigma) && sigma > 0)
+  
+  lm_model <- function(x, theta) {
+    x <- as.matrix(x)
+    X <- cbind(1, x)
+    mu <- X %*% theta
+    return(as.numeric(mu))
+  }
+  
+  # Calculate fitted mean
+  mu <- lm_model(X, theta)
+  
+  # Compute log-likelihood for N(y | mu, sigma^2) for each row
+  # logL = -1/2 * n * log(2*pi) - n * log(sigma) - 1/(2*sigma^2) * sum((y - mu)^2)
+  n <- length(y)
+  residuals <- y - mu
+  logL <- -0.5 * n * log(2 * pi) - n * log(sigma) - (0.5 / sigma^2) * sum(residuals^2)
+  
+  return(logL)
+}
+
+
+Ridge <- function(theta, sigma, lambda, X, y) {
+
+  stopifnot(length(theta) == ncol(X) + 1)
+  stopifnot(is.numeric(sigma) && sigma > 0)
+  stopifnot(is.numeric(lambda) && lambda >= 0)
+  
+  logL <- Loglikelihood(theta, sigma, X, y)
+  
+  ridge_penalty <- lambda * sum(theta^2)
+  
+  neg_loglik_with_penalty <- -logL + ridge_penalty
+  return(neg_loglik_with_penalty)
+}
+
+RidgeOpt <- function(theta, sigma, lambda, X, y) {
+  optim(par=theta, fn=Ridge, gr=NULL, method = "BFGS", sigma=sigma, lambda=lambda, X=X, y=y)
+}
+
+DF <- function(lambda, X) {
+  # Calculate the singular values of the training data matrix X.
+  d <- svd(X)$d
+  
+  # Calculate the degrees of freedom using the formula:
+  # sum(d^2 / (d^2 + lambda))
+  # This formula is a more computationally stable way to 
+  # find the trace of the hat matrix.
+  # See https://stats.stackexchange.com/questions/220243/the-proof-of-shrinking-coefficients-using-ridge-regression-through-spectral-dec/220324#220324
+  # for details
+  df <- sum(d^2 / (d^2 + lambda))
+  
+  # Return the calculated degrees of freedom.
+  return(df)
+}
+```
+
+```{r task_2_data_prep}
+# Read and clean data
+data <- read.csv("parkinsons.csv", header = TRUE)
+data <- subset(data, select = -c(subject., age, sex, test_time, total_UPDRS))
+
+# Scale
+# Exclude non-feature columns from scaling
+exclude_cols <- c("motor_UPDRS")
+feature_cols <- setdiff(names(data), exclude_cols)
+data[feature_cols] <- scale(data[feature_cols])
+
+n=dim(data)[1]
+set.seed(12345)
+id=sample(1:n, floor(n*0.6))
+train=data[id,]
+test=data[-id,]
+print(paste("Train data size: ", dim(train)[1]))
+print(paste("Test data size: ", dim(test)[1]))
+```
+
+```{r task_2_fit_lm}
+fit <- lm(motor_UPDRS ~ ., data = train)
+print(summary(fit))
+print(paste("Train MSE: ", mean(fit$residuals^2)))
+test_predictions <- predict(fit, newdata = test)
+test_mse <- mean((test$motor_UPDRS - test_predictions)^2)
+print(paste("Test MSE: ", test_mse))
+
+# Checking significance of each predictor
+summary_fit <- summary(fit)
+coefficients <- summary_fit$coefficients[-1,]
+# Columns: Estimate, Std. Error, t value, Pr(>|t|)
+# Variables with small p-values (below threshold, e.g. 0.05) 
+# contribute significantly and are likely good predictors
+significant_vars <- coefficients[coefficients[,4] < 0.05, ]
+print("Features contributing significantly to the model: ")
+print(rownames(significant_vars))
+```
+
+```{r task_2_fit_ridge}
+sigma <- summary(fit)$sigma
+theta <- coef(fit)
+
+# y <- data$motor_UPDRS
+# X <- as.matrix(subset(data, select = -c(motor_UPDRS)))
+# result <- Loglikelihood(theta, sigma, X, y)
+# print(paste("Loglikelihood result: ", result))
+# lambda <- 0.1                   # example ridge penalty
+# ridge_result <- Ridge(theta, sigma, lambda, X, y)
+# print(paste("Ridge result: ", ridge_result))
+
+lambdas <- c(0, 0.01, 0.1, 1, 10, 100, 1000)
+train_X <- as.matrix(subset(train, select = -motor_UPDRS))
+train_y <- train$motor_UPDRS
+results <- data.frame(
+  lambda = numeric(),
+  train_MSE = numeric(),
+  test_MSE = numeric(),
+  DF = numeric()
+)
+
+for (lambda in lambdas) {
+  opt <- RidgeOpt(theta = theta, sigma = sigma, lambda = lambda, X = train_X, y = train_y)
+  theta_hat <- opt$par
+  
+  train_X_pred <- cbind(1, train_X)
+  test_X <- as.matrix(subset(test, select = -motor_UPDRS))
+  test_X_pred <- cbind(1, test_X)
+  
+  train_preds <- as.numeric(train_X_pred %*% theta_hat)
+  test_preds <- as.numeric(test_X_pred %*% theta_hat)
+  
+  train_MSE <- mean((train_y - train_preds)^2)
+  test_MSE <- mean((test$motor_UPDRS - test_preds)^2)
+  
+  df_val <- DF(lambda, train_X)
+  
+  results <- rbind(results, data.frame(lambda = lambda, train_MSE = train_MSE, test_MSE = test_MSE, DF = df_val))
+}
+
+table_caption <- "Ridge Regression Results (Train/Test MSE and Degrees of Freedom)"
+knitr::kable(
+  results,
+  digits = 2, 
+  col.names = c("Lambda", "Train MSE", "Test MSE", "Degrees of Freedom"),
+  caption = table_caption,
+  align = c("c", "r", "r", "r") 
+)
 ```
 
 ## Assignment 3
@@ -25,7 +174,6 @@ summary(cars)
 
 ## Appendix
 
-All code
 
 ```{r, ref.label=setdiff(knitr::all_labels(), c('setup')), echo=TRUE, eval=FALSE}
 ```
