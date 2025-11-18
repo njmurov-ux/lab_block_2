@@ -78,6 +78,8 @@ DF <- function(lambda, X) {
 }
 ```
 
+In the first step, we load and scale the data and perform checks to make sure the data has been scaled and normalized. We then split the data into train and test datasets at the ratio of 60/40.
+
 ```{r task_2_data_prep}
 # Read and clean data
 data <- read.csv("parkinsons.csv", header = TRUE)
@@ -88,7 +90,15 @@ data <- subset(data, select = -c(subject., age, sex, test_time, total_UPDRS))
 exclude_cols <- c("motor_UPDRS")
 feature_cols <- setdiff(names(data), exclude_cols)
 data[feature_cols] <- scale(data[feature_cols])
+feature_means <- colMeans(data[feature_cols])
+feature_sds <- apply(data[feature_cols], 2, sd)
 
+print("Scaled data sample")
+print(head(data))
+print("Scaled data means")
+print(feature_means)
+print("Scaled data SDs")
+print(feature_sds)
 n=dim(data)[1]
 set.seed(12345)
 id=sample(1:n, floor(n*0.6))
@@ -97,6 +107,9 @@ test=data[-id,]
 print(paste("Train data size: ", dim(train)[1]))
 print(paste("Test data size: ", dim(test)[1]))
 ```
+
+We then fit a non-optimized linear regression model as a sanity check. We do use the intercept as one of the coefficients in our model as that represents the value of the target variable when all the input variables are at their mean values. We also extract the list of significant input variables from the summary of the lm function in R which are the coefficients with p-values below a certain arbitrary small threshold e.g. 0.05.  
+
 
 ```{r task_2_fit_lm}
 fit <- lm(motor_UPDRS ~ ., data = train)
@@ -116,6 +129,60 @@ significant_vars <- coefficients[coefficients[,4] < 0.05, ]
 print("Features contributing significantly to the model: ")
 print(rownames(significant_vars))
 ```
+
+
+Based on the assumption that the residuals of the linear regression function are normally distributed (this might need to be checked if it turns out that the model provides a poor fit to the data i.e. high test MSE but is outside the scope of this assignment), the log-likelihood formula we use is as follows:
+
+
+$$
+\mathcal{L}(\boldsymbol{\theta}, \sigma \mid X, y) = -\frac{n}{2}\log(2\pi) - n\log(\sigma) - \frac{1}{2\sigma^2}\sum_{i=1}^n \left[ y_i - (\theta_0 + \sum_{j=1}^p x_{ij}\theta_j) \right]^2
+$$
+
+where
+
+- **$y_i$**: The observed value of the target (dependent, or response) variable for observation $i$ (e.g., for your data, this could be a specific `motor_UPDRS` score).
+- **$x_{ij}$**: The value of the $j^{th}$ predictor (independent variable, feature) for observation $i$. Each $x_{ij}$ is a value drawn from your data table's predictor columns.
+- **$\theta_0$**: The intercept term, representing the expected value of $y$ when all predictors are zero.
+- **$\theta_j$**: The coefficient for predictor $j$, quantifying the change in $y$ per unit change in $x_{ij}$, holding other variables fixed.
+- **$p$**: The number of predictor variables (not counting the intercept).
+- **$n$**: The total number of observations in the data set (rows of your data).
+- **$\boldsymbol{\theta}$**: The vector of all coefficients, including the intercept ($\theta_0, \theta_1, \dots, \theta_p$).
+- **$X$**: The design matrix, where each row is an observation and each column is a predictor variable ($n \times p$ matrix; often with an added first column of ones for the intercept).
+- **$\sigma$**: The standard deviation of the residuals (errors), representing the typical size of the difference between observed values ($y_i$) and model predictions.
+
+Based on the results obtained from fitting a non-optimized linear regression model above, the test MSE does not seem to be sufficiently higher than the train MSE and therefore there is no sign of the model overfitting the train data. However, since we are specifically asked to do so, we also perform ridge regression to reduce the complexity of the model.
+
+The formula we use is
+
+$$
+\text{Loss}(\boldsymbol{\theta}, \sigma, \lambda)
+= -\log P(y \mid \boldsymbol{\theta}, \sigma, X)
+  + \lambda \sum_{j=0}^p \theta_j^2
+$$
+where:
+- $y$ is the vector of observed response values.
+- $\boldsymbol{\theta} = (\theta_{0}, \theta_{1}, ..., \theta_{p})$ is the full coefficient vector (including intercept).
+- $X$ is the $n \times p$ predictor matrix (not including the intercept column).
+- $\sigma$ is the residual standard deviation.
+- $\lambda \geq 0$ is the penalty parameter controlling the amount of shrinkage.
+- $P(y \mid \boldsymbol{\theta}, \sigma, X)$ is the likelihood of the data under the linear regression model with normal errors.
+
+We then perform the optimization of our ridge regression function using the Broyden-Fletcher-Goldfarb-Shanno (BFGS) algorithm and also calculate the degrees of freedom of the resulting ridge-optimized model for various values of lambda. The degrees of freedom in ridge regression measure the effective number of parameters being used by the fitted model, after accounting for the shrinkage effect of the ridge penalty. Unlike standard linear regression, where the degrees of freedom equal the number of predictors, ridge regression shrinks coefficients, reducing the model’s flexibility and thus its effective degrees of freedom. Given a data matrix $X$ (with $n$ rows and $p$ columns) and a ridge penalty parameter $\lambda \geq 0$,  
+let $d_1, d_2, \dots, d_p$ be the singular values of $X$, obtained from its singular value decomposition (SVD).
+
+The effective degrees of freedom for ridge regression are calculated as:
+$$
+df(\lambda) = \sum_{j=1}^p \frac{d_j^2}{d_j^2 + \lambda}
+$$
+
+where
+
+- **$X$**: The (centered and/or scaled) data matrix of predictors, with $n$ samples and $p$ features.
+- **$\lambda$**: The ridge penalty parameter, controlling the amount of coefficient shrinkage (higher $\lambda$ means stronger penalization and lower model flexibility).
+- **$d_j$**: The $j$-th singular value of $X$ (from SVD), which characterizes how much variance in the data is associated with each principal direction.
+- **$df(\lambda)$**: The effective degrees of freedom; the sum reflects the impact of ridge regularization on the true dimensionality of the model fit.
+
+The results of fitting the ridge-optimized model are summarized below: 
 
 ```{r task_2_fit_ridge}
 sigma <- summary(fit)$sigma
@@ -161,12 +228,15 @@ for (lambda in lambdas) {
 table_caption <- "Ridge Regression Results (Train/Test MSE and Degrees of Freedom)"
 knitr::kable(
   results,
-  digits = 2, 
+  digits = 3, 
+  format.args = list(scientific = FALSE),
   col.names = c("Lambda", "Train MSE", "Test MSE", "Degrees of Freedom"),
   caption = table_caption,
   align = c("c", "r", "r", "r") 
 )
 ```
+
+From the table above, we can see that at $\lambda$ equal to 0, we obtain the same values as for the non-optimized model which is used as a sanity check as in this case there is no coefficient shrinkage. We the observe a small improvement in test MSE at small values of $\lambda$ such as 0.1 which indicates that a slight coefficient shrinkage can be beneficial. However, at high values of $\lambda$, we observe a significant growth of both the train and the test MSE which indicates that we have oversimplified our model and it can no longer adequately describe the data (underfitting).  
 
 ## Assignment 3
 
