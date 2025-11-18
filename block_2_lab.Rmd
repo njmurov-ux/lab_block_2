@@ -342,6 +342,17 @@ Based on the results above, the model with 3 clusters provides the best fit as i
 
 # Assignment 4. Theory questions.
 
+**Q2 In AdaBoost, what is the loss function used to train the boosted classifier at each iteration?** Page 177 lists the loss function used by the AdaBoost classifier as follows:
+$$
+L(y \cdot f(\mathbf{x})) = \exp(-y \cdot f(\mathbf{x}))
+$$
+where:
+
+- $y$ is the true label for the instance, typically $+1$ or $-1$
+- $f(\mathbf{x})$ is the current margin output from the ensemble classifier for the data point $\mathbf{x}$
+The product $y \cdot f(\mathbf{x})$ is known as the margin and indicates how confidently the classifier predicts the correct label.
+
+
 ## Appendix
 
 All code

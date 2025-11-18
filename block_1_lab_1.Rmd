@@ -242,6 +242,8 @@ From the table above, we can see that at $\lambda$ equal to 0, we obtain the sam
 
 ## Assignment 4. Theory
 
+**Q2 What ways of collecting correct values of the target variable for the supervised learning problems are mentioned in the book?** Pages 6 and 14 mention either recording input X and output y together or having input data X labeled by a domain expert.
+
 ## Appendix
 
 
