@@ -1,0 +1,175 @@
+---
+title: "lab01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Assignment 3. Logistic regression and basis function
+
+### 3.1 Scatterplot showing a Plasma glucose concentration on Age
+
+```{r library, include=FALSE}
+library(ggplot2)
+```
+```{r 3.1, echo=FALSE}
+df <- as.data.frame(read.csv("data/pima-indians-diabetes.csv", header = FALSE))
+
+colnames(df) <- c("pregnancies", "glucose", "blood_pressure", "skin_thickness", "insulin", "BMI", "diabetes_pedigree_function", "age", "diabetes")
+
+ggplot(df, aes(x = age, y = glucose, color = factor(diabetes))) +
+  geom_point() +
+  labs(title = "Plasma glucose Concentration vs age",
+       x = "Age",
+       y = "Plasma glucose Concentration",
+       color = "diabetes") +
+  theme_minimal()
+
+```
+
+**Comments**
+
+The scatterplot shows that glucose and age do relate to diabetes, but the two classes overlap a lot. This means it is not easy to classify diabetes using only these two variables with a simple logistic regression model.
+
+### 3.2 Train a logistic regression model
+
+```{r 3.2, echo=FALSE}
+model <- glm(diabetes ~ glucose + age, data = df, family = binomial)
+
+# Show summary
+summary(model)
+
+# Predicted probabilities
+probs <- predict(model, type = "response")
+
+# Predicted classes using threshold r = 0.5
+pred_class <- ifelse(probs > 0.5, 1, 0)
+
+# Compute misclassification error
+misclassification_func <- function(predicted, actual) {
+  n <- length(actual)
+  confusion <- table(predicted, actual)
+  accuracy <- sum(diag(confusion)) / n
+  misclassification <- 1 - accuracy
+  return(misclassification)
+}
+
+
+error_rate <- misclassification_func(pred_class, df$diabetes)
+cat("Misclassification rate (r = 0.5):", round(error_rate, 3), "\n")
+
+```
+
+**Probabilistic Model** 
+
+$$p(x) = \cfrac{1}{1 + e^{-(-5.912449 + 0.035644x_1 + 0.024778x_2)}} $$
+where $x_1$ = Plasma glucose concentration and $x_2$ = age.
+
+**Comments** 
+
+The logistic regression model gives a misclassification rate of 0.263, meaning it gets about 74% of the predictions right.
+The model works reasonably well but makes many mistakes because the classes overlap. This shows that glucose and age alone do not fully separate diabetic and non-diabetic individuals.
+
+### 3.3 Compute boundary line (r = 0.5)
+
+```{r 3.3, echo=FALSE}
+coeff <- coef(model)
+slope <- -coeff["age"] / coeff["glucose"]
+intercept <- -coeff["(Intercept)"] / coeff["glucose"]
+cat("Equation of the decision boundary: glucose = ", slope, " * age + ", intercept, "\n")
+
+# Plot with boundary line
+ggplot(df, aes(x = age, y = glucose, color = factor(pred_class))) +
+  geom_point() +
+  geom_abline(intercept = intercept, slope = slope,  color = "darkgreen", linetype = "solid", linewidth = 1) +
+  labs(title = "Decision Boundary (r = 0.5)",
+       x = "Age",
+       y = "Plasma glucose Concentration",
+       color = "Predicted diabetes") +
+  theme_minimal()
+
+```
+
+**Comments** 
+
+The decision boundary is a straight line, because logistic regression is linear.
+The line does not perfectly follow how the data is spread out. Many points fall on the wrong side of the boundary, which explains the moderate error rate.
+
+### 3.4 Thresholds r = 0.2 and r = 0.8
+
+```{r 3.4, echo=FALSE}
+r_values <- c(0.2, 0.8)
+
+for (r in r_values) {
+  pred_class_r <- ifelse(probs > r, 1, 0)
+  
+  # Misclassification rate
+  err <- misclassification_func(pred_class_r, df$diabetes)
+  cat("Misclassification rate (r =", r, "):", round(err, 3), "\n")
+  
+  # Plot
+  ggplot(df, aes(x = age, y = glucose, color = factor(pred_class_r))) +
+    geom_point() +
+    labs(title = paste("Decision Regions for threshold r =", r),
+         x = "Age",
+         y = "Plasma glucose concentration",
+         color = "Predicted class") +
+    theme_minimal() ->
+    p
+  
+  print(p)
+}
+
+```
+
+**Comments** 
+
+- With r = 0.2, the model predicts more diabetics (many false positives).
+
+- With r = 0.8, the model predicts fewer diabetics (many false negatives).
+
+Changing the threshold does not change the boundary shape but only how strict the model is when deciding between class 0 and class 1.
+
+### 3.5 Basis Expansion (Nonlinear Logistic Regression)
+
+```{r 3.5, echo=FALSE}
+# Create basis expansion features
+df$z1 <- df$glucose^4
+df$z2 <- df$glucose^3 * df$age
+df$z3 <- df$glucose^2 * df$age^2
+df$z4 <- df$glucose * df$age^3
+df$z5 <- df$age^4
+
+# Fit expanded model
+model_expanded <- glm(diabetes ~ glucose + age + z1 + z2 + z3 + z4 + z5,
+                      data = df, family = binomial)
+
+summary(model_expanded)
+
+# Predicted probabilities
+probs_expanded <- predict(model_expanded, type = "response")
+pred_expanded <- ifelse(probs_expanded > 0.5, 1, 0)
+
+# Misclassification rate
+error_rate_expanded <- misclassification_func(pred_expanded, df$diabetes)
+cat("Misclassification rate (expanded model, r = 0.5):",
+    round(error_rate_expanded,3), "\n")
+
+# Plot
+ggplot(df, aes(y = glucose, x = age )) +
+  geom_point(aes(color = factor(pred_expanded))) +
+  labs(
+    x = "Age",
+    y = "Plasma glucose concentration",
+    color = "Diabetes"
+  )
+
+```
+
+**Comments** 
+
+After adding polynomial features, the misclassification rate improves slightly to 0.245.
+This model is better because it can create a curved, nonlinear decision boundary, which fits the data more closely.
+The improvement is small, but it shows that the relationship between age, glucose, and diabetes is not purely linear.
