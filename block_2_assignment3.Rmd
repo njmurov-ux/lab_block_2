@@ -1,0 +1,164 @@
+---
+title: "block2Assignment3"
+output: html_document
+date: "2025-11-19"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r library, include=FALSE}
+library(mvtnorm)
+```
+
+```{r 3.1, echo=FALSE}
+
+### DATA
+
+set.seed(123)
+N=300  # training
+M=3000 # test
+D=2    # dimensions
+
+tr <- matrix(nrow=N, ncol=D+1)
+te <- matrix(nrow=M, ncol=D+1)
+
+B <- 10                 # bootstraps for bagging
+pte <- matrix(nrow=M,ncol=B)  # store predictions from each model
+
+mu1<-c(0,0)
+Sigma1 <- matrix(c(5,1,1,5),D,D)
+dat1<-rmvnorm(n = 1100, mu1, Sigma1)
+
+mu2<-c(4,6)
+Sigma2 <- matrix(c(5,-1,-1,5),D,D)
+dat2<-rmvnorm(n = 1100, mu2, Sigma2)
+
+mu3<-c(7,2)
+Sigma3 <- matrix(c(3,2,2,3),D,D)
+dat3<-rmvnorm(n = 1100, mu3, Sigma3)
+
+# Plots the points
+plot(dat1,xlim=c(-10,15),ylim=c(-10,15))
+points(dat2,col="red")
+points(dat3,col="blue")
+
+# Training
+tr[1:100,]   <- cbind(dat1[1:100,], 1)
+tr[101:200,] <- cbind(dat2[1:100,], 2)
+tr[201:300,] <- cbind(dat3[1:100,], 3)
+
+# Test
+te[1:1000,]    <- cbind(dat1[101:1100,], 1)
+te[1001:2000,] <- cbind(dat2[101:1100,], 2)
+te[2001:3000,] <- cbind(dat3[101:1100,], 3)
+
+K = 3  # number of classes
+
+### TRAIN GMM (Task 1)
+
+train_gmm <- function(data) {
+  x <- data[,1:D]
+  y <- data[,D+1]
+  
+  pi <- numeric(K)
+  mu <- matrix(0, nrow=K, ncol=D)
+  Sigma <- array(0, dim=c(D,D,K))
+  
+  for(m in 1:K){
+    xm <- x[y==m,,drop=FALSE]
+    nm <- nrow(xm)
+    
+    pi[m] <- nm / nrow(data)                # π_m
+    mu[m,] <- colMeans(xm)                  # μ_m
+    Sigma[,,m] <- cov(xm) * (nm-1)/nm       # Σ_m (ML estimate)
+  }
+  
+  return(list(pi=pi, mu=mu, Sigma=Sigma))
+}
+
+
+### QDA Prediction using GMM
+
+predict_qda <- function(model, X) {
+  pi <- model$pi
+  mu <- model$mu
+  Sigma <- model$Sigma
+  
+  M_test <- nrow(X)
+  scores <- matrix(0, nrow=M_test, ncol=K)
+  
+  for(m in 1:K){
+    scores[,m] <- log(pi[m]) + 
+      dmvnorm(X, mean=mu[m,], sigma=Sigma[,,m], log=TRUE)
+  }
+  
+  pred <- max.col(scores)    # argmax
+  return(pred)
+}
+
+
+### ------ TASK 1: SINGLE MODEL ------
+
+model1 <- train_gmm(tr)
+pred1 <- predict_qda(model1, te[,1:D])
+
+true_labels <- te[,D+1]
+error1 <- mean(pred1 != true_labels)
+
+cat("Task 1: Test Error (Single GMM/QDA Model) =", error1, "\n")
+
+
+### ------ TASK 2: BAGGING ------
+
+
+### Utility: majority vote
+
+getmode <- function(v) {
+  uniqv <- unique(v)
+  uniqv[which.max(tabulate(match(v, uniqv)))]
+}
+
+for(b in 1:B){
+  
+  # Bootstrap training sample
+  idx <- sample(1:N, N, replace=TRUE)
+  boot_data <- tr[idx,]
+  
+  # Train model on bootstrap
+  model_b <- train_gmm(boot_data)
+  
+  # Predict test
+  pte[,b] <- predict_qda(model_b, te[,1:D])
+}
+
+# Majority vote for each test point
+final_pred <- apply(pte, 1, getmode)
+
+error_bag <- mean(final_pred != true_labels)
+
+cat("Task 2: Test Error (Bagging with B =",B,") =", error_bag, "\n")
+
+```
+
+**Comments**
+Bagging (bootstrap aggregation) reduces variance by majority voting or averaging many different models. But it only helps much when the base learners are high-variance (their predictions change a lot with different training samples). Bagging improves models that change a lot when the training data changes (high variance), like:
+
+  - decision trees
+  - neural networks
+  - nearest neighbors
+
+Possible reasons bagging gave almost no improvement here:
+
+- Low variance base model: The generative/QDA-style classifier (Gaussian per class) is fairly stable — different bootstrap samples produce very similar parameter estimates, so the B models are almost the same. Majority voting with similar models doesn’t change much.
+Even when we bootstrap the dataset, each resample gives almost the same:
+
+  - mean
+  - covariance
+  - prior
+
+So each of the 10 models ends up nearly identical.When all models are similar, bagging gives almost no improvement.
+
+- Strong correlation between base learners: With a small training set or when classes are well separated, bootstrap samples contain mostly the same information. The base models are highly correlated → majority vote gives little gain.
+
