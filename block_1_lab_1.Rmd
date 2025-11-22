@@ -1,15 +1,331 @@
 ---
-title: "lab_1_block_1"
+title: "Lab 1 report"
 author: "Aron, Sergey, Shahin"
 date: "2025-11-15"
-output: pdf_document
+output:
+  pdf_document: default
+  html_document: default
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(
+  echo = FALSE
+)
+
 ```
 
 ## Assignment 1. Handwritten digit recognition with K-nearest neighbors.
+**1.** A dataset is given with handwritten numbers. These are originally 32x32. The information is compressed by doing a 4x4 convolution that sums the pixels. This results in 8x8 = 64 variables. The aim of this assignment is to classify the handwritten numbers by identifying clusters in these variables. Before analysis the data is divided into 50\% training data, 25\% validation data and 25\% test data according to the slides. \newline
+
+
+
+```{r, echo = FALSE, message=FALSE, warning=FALSE}
+#setwd("C:/Users/arone/Desktop/MasterML")
+data <- read.csv("C:/Users/arone/Desktop/MasterML/optdigits.csv")
+
+library(dplyr)
+library(ggplot2)
+library(kknn)
+library(reshape2)
+library(tidyverse)
+library(ggpubr)
+
+
+#sapply(1:ncol(data), function(x) data[, x] %>% unique() %>% length())
+
+
+colnames(data)[65] <- "y"
+data$y <- data$y %>% as.factor()
+
+
+n=dim(data)[1]
+set.seed(12345)
+id=sample(1:n, floor(n*0.5))
+train=data[id,]
+
+# the ids not in id
+id1=setdiff(1:n, id)
+
+set.seed(12345)
+id2=sample(id1, floor(n*0.25))
+valid=data[id2,]
+
+id3=setdiff(id1,id2)
+test=data[id3,]
+# the rest is test
+
+```
+
+
+
+**2.** KNN is fit using the following code:
+
+```{r}
+model <- kknn(y ~ ., train = train, test = valid, k = 30, kernel = "rectangular")
+y_hat_v <- model$fitted.values 
+
+model <- kknn(y ~ ., train = train, test = train, k = 30, kernel = "rectangular")
+y_hat_t <- model$fitted.values 
+
+```
+
+
+
+```{r, echo=FALSE}
+
+conf_table <- function(y, y_hat, decimals = 2, p_or_r) {
+  
+  cm <- table(Number = y, Predict = y_hat) 
+  
+  C <- nrow(cm)
+  # I wanna do relative coloring, based on deviation
+  rowsums <- sapply(1:C, function(x) sum(cm[x, ]))
+  perfect_pred <- diag(rowsums)
+  
+  diff <- cm - perfect_pred
+  
+  # If one row has more examples than another we need to scale to see devation
+  for (i in 1:nrow(diff)) {
+    diff[i, ] <- diff[i, ] / rowsums[i]
+    
+  }
+  
+  # I dont care about the diagonal, the most interesting is that the errors pop out
+  diff[diff < 0] <- 0
+  
+  
+  cm_long <- melt(cm)
+  cm_long$Number <- cm_long$Number[nrow(cm_long):1] %>% as.factor()
+  cm_long$Predict <- cm_long$Predict %>% as.factor()
+  
+  cm_long$color <- melt(diff)$value
+  
+  
+  
+  ggplot(cm_long, aes(x = Predict, y = Number, fill = color)) +
+    geom_tile(color = "black") +
+    geom_text(aes(label = value), color = "black", size = 5) +
+    scale_fill_gradient(low = "white", high = "#3182bd", guide = "none") +
+    theme_minimal(base_size = 25) +
+    scale_y_discrete(labels = levels(cm_long$Number) %>% rev() ) +
+    labs(x = "Predicted", y = "Actual", title = paste0("Missclassification rate = ", 
+                                                       (1 - mean(y == y_hat)) %>% 
+                                                         round(decimals)) ) +
+    theme(
+      axis.text.x = element_text(hjust = 1, face = "bold"),
+      axis.text.y = element_text(face = "bold"),
+      plot.title = element_text(hjust = 0.5, face = "bold"),
+      panel.grid = element_blank(),
+    )
+}
+
+conf_table(train$y, y_hat_t)
+
+```
+
+```{r}
+conf_table(valid$y, y_hat_v)
+
+```
+
+
+Overall the missclassification rate is low in both models, it is possible to do better and it would be context dependent. Say the number detection is for a banking application, then 6\% error is unacceptable. In the training set the model predicts 1 and 9 too often, 1s were predicted when it was an 8 and 9s were predicted when it was a 5. The same errors are present in the validation set but here the model also predicts 7s when the actual number is a 9.\newline
+
+**3.** Here we look at examples visually of 8s in that were hard and easy for the model to classify. Keep in mind that the displayed images are after the convolution which makes it harder for humans to interpret perfectly. \newline
+
+
+```{r, echo = FALSE}
+
+model <- kknn(y ~ ., train = train, test = train, k = 30, kernel = "rectangular")
+# ----------------------------------------------
+# Ex 3
+prob_eight <- model$prob[, 9][y_hat_t == 8]
+ordering <- prob_eight[order(prob_eight)]
+hard <- ordering[1:3]
+easy <- ordering[(length(ordering)-1):length(ordering)]
+
+hard_index <- which(prob_eight %in% hard)
+easy_index <- which(prob_eight %in% easy)[1:2]
+
+
+viz_number <- function(index, title, df = train, which_num = 8) {
+  df <- train[y_hat_t == which_num, ]
+  vec <- df[index, 1:64]
+  viz_matrix <- matrix(0, 8, 8)
+  for (i in 1:8) {
+    viz_matrix[i, ] <- vec[(8*(i-1) + 1):(8*i)] %>% as.matrix()
+  }
+  
+  M_long <- melt(viz_matrix)
+  
+  ggplot(M_long, aes(x = Var2, y = Var1, fill = value)) +
+    geom_tile(color = "black") +
+    geom_text(aes(label = round(value, 2)), color = "white", size = 5) +
+    scale_fill_gradient(low = "white", high = "black", guide = "none") +
+    theme_minimal(base_size = 25) +
+    scale_y_discrete(limits = rev(levels(M_long$Var1))) +
+    labs(x = "", y = "", title = title) +
+    theme(
+      axis.text.x = element_blank(),
+      axis.text.y = element_blank(),
+      plot.title  = element_text(hjust = 0.5, face = "bold"),
+      panel.grid  = element_blank()
+    )
+  
+  
+}
+
+ggarrange(
+  viz_number(easy_index[1], "Easy 8s"),
+  viz_number(easy_index[2], "")
+)
+
+```
+
+These look like eights, we clearly see two round shapes, on the right image we even see holes in the middle of the convolutions, the left image must have a smaller ring above. \newline
+
+```{r, echo = FALSE}
+ggarrange(
+  viz_number(hard_index[1], ""),
+  viz_number(hard_index[2], "Hard 8s"),
+  viz_number(hard_index[3], ""),
+  ncol = 3
+)
+
+```
+
+These had probability 0.33, 0.37 and 0.37 of being 8s, but 8 had the highest probability. We see that the above ring resembles more a line and that it could be close to a 6, all of these images look slightly rotated and the 2 rightmost images are hard to classify visually. Maybe the model could benefit from augmented data with rotations. \newline
+
+**4.** Lets try to optimize k by looking at the validation error. \newline
+```{r, echo = FALSE}
+
+train_error <- c()
+validation_error <- c()
+
+for (k in 1:5) {
+  if (k%%5 == 0) {
+    #print(k)
+  }
+  model <- kknn(y ~ ., train = train, test = valid, k = k, kernel = "rectangular")
+  y_hat_v <- model$fitted.values 
+  
+  model <- kknn(y ~ ., train = train, test = train, k = k, kernel = "rectangular")
+  y_hat_t <- model$fitted.values 
+  
+  train_error <- c(train_error, 1 - (train$y == y_hat_t) %>% mean())
+  validation_error <- c(validation_error, 1 - (valid$y == y_hat_v) %>% mean())
+  
+}
+
+plot_df <- data.frame(Validation = validation_error, Train = train_error, 
+                      k = 1:length(train_error))
+ggplot(plot_df) + aes(x = k) + geom_line(aes(y = Validation, color = "Validation")) + 
+  geom_line(aes(y = Train, color = "Train")) + theme_bw(base_size = 25) + 
+  scale_color_manual(values = c("Validation" = "red", "Train" = "black")) +
+  geom_vline(xintercept = which.min(validation_error), linetype = "dashed", color = "grey", linewidth = 1.5) + 
+  labs(y = "Missclassification error", color = "Dataset") + theme(
+    axis.text.x = element_text(hjust = 1, face = "bold"),
+    axis.text.y = element_text(face = "bold"),
+    axis.title.y = element_text(size = 25),
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    panel.grid = element_blank(),
+  ) + annotate("text", x = 17, y = 0.01, 
+               label = paste0("Optimal k = ", which.min(validation_error)), size = 5)
+
+
+model <- kknn(y ~ ., train = train, test = test, 
+              k = which.min(validation_error), kernel = "rectangular")
+y_hat_test <- model$fitted.values 
+
+
+# Shows prescision and recall, only used for interest, not in the report:
+missclass_table <- function(y, y_hat) {
+  
+  cm <- table(Number = y, Predict = y_hat)
+  FN <- sapply(1:nrow(cm), function(x) (sum(cm[x, ]) - cm[x, x]))
+  TP <- diag(cm)
+  FP <- sapply(1:ncol(cm), function(x) (sum(cm[, x]) - cm[x, x]))
+  
+  # when predicting class X how many times was right?
+  Prescision <- TP / (TP + FP)
+  
+  # when the class was X how often was X predicted?
+  Recall <- TP / (TP + FN)
+  
+  miss_table <- rbind(Prescision, Recall) %>% round(2)
+  
+  print("Prescision: when predicting class X how many times was right?")
+  print("Recall: when the class was X how often was X predicted?")
+  return(miss_table)
+  
+}
+
+#missclass_table(test$y, y_hat_test)
+#conf_table(test$y, y_hat_test)
+
+
+```
+
+For small K we see that the model is extremely overfit in the training set. If k=1 every point will be classified as itself. But the model won't generalize well. If K is too large the model will take a larger neighboorhood into consideration. The issue with that could be that the model cannot pick up the 5s that look similar to 9s that we mentioned earlier. We can't fit to small details like this, model complexity drops. Looking at the errors we see that the validation error is basically identical for k < 10. Even with k = 1 which is interesting, the prediction would be the closest number in the training set then. For higher k we start missclassifying numbers that are similar to eachother. \newline
+\newline
+The missclassification error in the test set is 4\%, slightly higher than in the validation set. The model seems to generalize assuming the test set is a fair characterization of what the model will encounter in the real world. \newline
+
+
+\newpage  
+**5.** Optimizing k using cross-entropy loss instead of missclassification error in the validation set.
+```{r, echo = FALSE}
+
+cross_error <- c()
+for (k in 1:5) {
+  if (k%%5 == 0) {
+    #print(k)
+  }
+  model <- kknn(y ~ ., train = train, test = valid, k = k, kernel = "rectangular")
+  y_hat_ <- model$fitted.values
+  
+  
+  # x + 1 as the indexing starts at 1
+  loss_per_class <- sapply(0:9, function(x) {
+    neg_loss <- (model$prob[valid$y == x, x + 1]  + 10e-15) %>% 
+      log() %>% sum()
+    return(-neg_loss)
+  } 
+  )
+  
+  
+  cross_error <- c(cross_error, sum(loss_per_class))
+  
+}
+
+
+
+
+plot_df <- data.frame(Validation = cross_error, 
+                      k = 1:length(cross_error))
+ggplot(plot_df) + aes(x = k) + geom_line(aes(y = Validation), color = "black") + 
+  theme_bw(base_size = 25) + 
+  geom_vline(xintercept = which.min(cross_error), linetype = "dashed", color = "grey", linewidth = 1.5) + 
+  labs(y = "Cross-entropy loss") + theme(
+    axis.text.x = element_text(hjust = 1, face = "bold"),
+    axis.text.y = element_text(face = "bold"),
+    axis.title.y = element_text(size = 25),
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    panel.grid = element_blank(),
+  ) + annotate("text", x = 17, y = 1000, 
+               label = paste0("Optimal k = ", which.min(cross_error)), size = 5)
+
+
+
+
+```
+\newline
+The multinomial pdf is proportional in $p_i$ to
+$$\prod_{c=1}^C p_c^{x_c}$$
+  where C is the amount of classes and $x_c$ is the amount of occurrences of the class c in the sample.
+If we maximize the likelihood for p, equivalent to maximizing the log-likelihood we get the following.
+$$ \ell(p) = constant + \sum_{c=1}^C x_c log(p_c)$$
+  Which is similar to minimizing the cross entropy $$ C.E. = -\sum_{i=1}^n \sum_{c=1}^C\mathbf{1}_{\{\text{observation i is of class c}\}} log(\hat{p_c}(data))$$
+  If we say Y|data is multinomial with $\vec{p} = \vec{p|data}$ then it maps one to one to cross entropy, as we will have n samples from the multinomial with $x_c$ for each being 1. This is more reasonable in this case as the first example ignored all the covariates that are available.
 
 ## Assignment 2. Linear regression and ridge regression
 
@@ -24,7 +340,7 @@ knitr::opts_chunk$set(echo = FALSE)
 rm(list = ls())
 
 Loglikelihood <- function(theta, sigma, X, y) {
-
+  
   stopifnot(length(theta) == ncol(X) + 1)
   stopifnot(is.numeric(sigma) && sigma > 0)
   
@@ -49,7 +365,7 @@ Loglikelihood <- function(theta, sigma, X, y) {
 
 
 Ridge <- function(theta, sigma, lambda, X, y) {
-
+  
   stopifnot(length(theta) == ncol(X) + 1)
   stopifnot(is.numeric(sigma) && sigma > 0)
   stopifnot(is.numeric(lambda) && lambda >= 0)
@@ -87,7 +403,8 @@ In the first step, we load and scale the data and perform checks to make sure th
 
 ```{r task_2_data_prep}
 # Read and clean data
-data <- read.csv("data/parkinsons.csv", header = TRUE)
+#setwd("C:/Users/arone/Desktop/MasterML")
+data <- read.csv("C:/Users/arone/Desktop/MasterML/parkinsons.csv", header = TRUE)
 data <- subset(data, select = -c(subject., age, sex, test_time, total_UPDRS))
 
 # Scale
@@ -98,12 +415,12 @@ data[feature_cols] <- scale(data[feature_cols])
 feature_means <- colMeans(data[feature_cols])
 feature_sds <- apply(data[feature_cols], 2, sd)
 
-print("Scaled data sample")
-print(head(data))
-print("Scaled data means")
-print(feature_means)
-print("Scaled data SDs")
-print(feature_sds)
+#print("Scaled data sample")
+#print(head(data))
+#print("Scaled data means")
+#print(feature_means)
+#print("Scaled data SDs")
+#print(feature_sds)
 n=dim(data)[1]
 set.seed(12345)
 id=sample(1:n, floor(n*0.6))
@@ -118,7 +435,7 @@ We then fit a non-optimized linear regression model as a sanity check. We do use
 
 ```{r task_2_fit_lm}
 fit <- lm(motor_UPDRS ~ ., data = train)
-print(summary(fit))
+#print(summary(fit))
 print(paste("Train MSE: ", mean(fit$residuals^2)))
 test_predictions <- predict(fit, newdata = test)
 test_mse <- mean((test$motor_UPDRS - test_predictions)^2)
@@ -137,13 +454,13 @@ print(rownames(significant_vars))
 
 
 Based on the assumption that the residuals of the linear regression function are normally distributed (this might need to be checked if it turns out that the model provides a poor fit to the data i.e. high test MSE but is outside the scope of this assignment), the log-likelihood formula we use is as follows:
-
-
+  
+  
+  $$
+  \mathcal{L}(\boldsymbol{\theta}, \sigma \mid X, y) = -\frac{n}{2}\log(2\pi) - n\log(\sigma) - \frac{1}{2\sigma^2}\sum_{i=1}^n \left[ y_i - (\theta_0 + \sum_{j=1}^p x_{ij}\theta_j) \right]^2
 $$
-\mathcal{L}(\boldsymbol{\theta}, \sigma \mid X, y) = -\frac{n}{2}\log(2\pi) - n\log(\sigma) - \frac{1}{2\sigma^2}\sum_{i=1}^n \left[ y_i - (\theta_0 + \sum_{j=1}^p x_{ij}\theta_j) \right]^2
-$$
-
-where
+  
+  where
 
 - **$y_i$**: The observed value of the target (dependent, or response) variable for observation $i$ (e.g., for your data, this could be a specific `motor_UPDRS` score).
 - **$x_{ij}$**: The value of the $j^{th}$ predictor (independent variable, feature) for observation $i$. Each $x_{ij}$ is a value drawn from your data table's predictor columns.
@@ -257,8 +574,10 @@ From the table above, we can see that at $\lambda$ equal to 0, we obtain the sam
 rm(list = ls()) 
 library(ggplot2)
 ```
+
 ```{r 3.1, echo=FALSE}
-df <- as.data.frame(read.csv("data/pima-indians-diabetes.csv", header = FALSE))
+#setwd("C:/Users/arone/Desktop/MasterML")
+df <- as.data.frame(read.csv("C:/Users/arone/Desktop/MasterML/pima-indians-diabetes.csv", header = FALSE))
 
 colnames(df) <- c("pregnancies", "glucose", "blood_pressure", "skin_thickness", "insulin", "BMI", "diabetes_pedigree_function", "age", "diabetes")
 
@@ -282,7 +601,7 @@ The scatterplot shows that glucose and age do relate to diabetes, but the two cl
 model <- glm(diabetes ~ glucose + age, data = df, family = binomial)
 
 # Show summary
-summary(model)
+#summary(model)
 
 # Predicted probabilities
 probs <- predict(model, type = "response")
@@ -389,7 +708,7 @@ df$z5 <- df$age^4
 model_expanded <- glm(diabetes ~ glucose + age + z1 + z2 + z3 + z4 + z5,
                       data = df, family = binomial)
 
-summary(model_expanded)
+#summary(model_expanded)
 
 # Predicted probabilities
 probs_expanded <- predict(model_expanded, type = "response")
@@ -441,10 +760,20 @@ This means that all input data are placed into one large matrix \(X\), all outpu
 X^T X \theta = X^T y,\]
 
 which provides a direct solution for the optimal \(\theta\).  
-  
+
+## Statement of Contribution
+
+Assignment 1 was mainly contributed by Aron. 
+Assignment 2 was mainly contributed by Sergey. 
+Assignment 3 was mainly contributed by Shahin.
+The theory was mainly done by Shahin and Sergey.
+Formatting the report was mainly done by Aron.
+
 
 ## Appendix
 
 
 ```{r, ref.label=setdiff(knitr::all_labels(), c('setup')), echo=TRUE, eval=FALSE}
+
+
 ```
