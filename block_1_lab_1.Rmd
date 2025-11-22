@@ -87,7 +87,7 @@ In the first step, we load and scale the data and perform checks to make sure th
 
 ```{r task_2_data_prep}
 # Read and clean data
-data <- read.csv("parkinsons.csv", header = TRUE)
+data <- read.csv("data/parkinsons.csv", header = TRUE)
 data <- subset(data, select = -c(subject., age, sex, test_time, total_UPDRS))
 
 # Scale
@@ -418,8 +418,30 @@ This model is better because it can create a curved, nonlinear decision boundary
 The improvement is small, but it shows that the relationship between age, glucose, and diabetes is not purely linear.
 
 ## Assignment 4. Theory
+**Q1 Why can it be important to consider various probability thresholds in the classification problems, according to the book?** 
+The book (p.50) says that using the usual threshold of 0.5 only works well when both types of mistakes are equally bad and both classes appear equally often. In many real situations, one type of mistake is worse than the other (for example, missing a disease is worse than a false alarm). Sometimes one class is much rarer than the other, and 0.5 does not work well for that. Changing the threshold helps you decide which type of error you want to avoid more. 
 
-**Q2 What ways of collecting correct values of the target variable for the supervised learning problems are mentioned in the book?** Pages 6 and 14 mention either recording input X and output y together or having input data X labeled by a domain expert.
+**Q2 What ways of collecting correct values of the target variable for the supervised learning problems are mentioned in the book?** 
+The book (p.6) explains that in supervised learning, the training labels come from a “supervisor.”
+This supervisor can be a human domain expert, such as a doctor labeling ECG data as normal or abnormal.
+But the book also says that the supervisor does not always have to be a human. Labels may come from automated computations, such as physics simulations (DFT) used to compute formation energies.
+In other situations, the labels come naturally from real-world outcomes, such as the result of a soccer match or the sale price of an apartment. 
+
+**Q3 How can one express the cost function of the linear regression in the matrix form, according to the book?** 
+
+The book *(p.41)* shows that the cost of linear regression can be written in matrix form as:
+
+\[
+\frac{1}{n} \| X\theta - y \|^2.
+\]
+
+This means that all input data are placed into one large matrix \(X\), all outputs are placed into a vector \(y\), and the model parameters are stored in a vector \(\theta\). Writing the model this way makes it easier to compute the best parameters using linear algebra. It also leads to the normal equation:
+
+\[
+X^T X \theta = X^T y,\]
+
+which provides a direct solution for the optimal \(\theta\).  
+  
 
 ## Appendix
 
