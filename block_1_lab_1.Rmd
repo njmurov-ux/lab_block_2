@@ -1,6 +1,6 @@
 ---
 title: "Lab 1 report"
-author: "Aron, Sergey, Shahin"
+author: "Group B13: Aron(aroen488), Sergey(servo519), Shahin(mdpa888)"
 date: "2025-11-15"
 output:
   pdf_document: default
@@ -20,8 +20,12 @@ knitr::opts_chunk$set(
 
 
 ```{r, echo = FALSE, message=FALSE, warning=FALSE}
-#setwd("C:/Users/arone/Desktop/MasterML")
-data <- read.csv("C:/Users/arone/Desktop/MasterML/optdigits.csv")
+#######################
+#
+# TASK 1 CODE
+#
+#######################
+data <- read.csv("data/optdigits.csv")
 
 library(dplyr)
 library(ggplot2)
@@ -404,7 +408,7 @@ In the first step, we load and scale the data and perform checks to make sure th
 ```{r task_2_data_prep}
 # Read and clean data
 #setwd("C:/Users/arone/Desktop/MasterML")
-data <- read.csv("C:/Users/arone/Desktop/MasterML/parkinsons.csv", header = TRUE)
+data <- read.csv("data/parkinsons.csv", header = TRUE)
 data <- subset(data, select = -c(subject., age, sex, test_time, total_UPDRS))
 
 # Scale
@@ -576,8 +580,7 @@ library(ggplot2)
 ```
 
 ```{r 3.1, echo=FALSE}
-#setwd("C:/Users/arone/Desktop/MasterML")
-df <- as.data.frame(read.csv("C:/Users/arone/Desktop/MasterML/pima-indians-diabetes.csv", header = FALSE))
+df <- as.data.frame(read.csv("data/pima-indians-diabetes.csv", header = FALSE))
 
 colnames(df) <- c("pregnancies", "glucose", "blood_pressure", "skin_thickness", "insulin", "BMI", "diabetes_pedigree_function", "age", "diabetes")
 
