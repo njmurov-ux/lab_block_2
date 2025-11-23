@@ -206,7 +206,7 @@ These had probability 0.33, 0.37 and 0.37 of being 8s, but 8 had the highest pro
 train_error <- c()
 validation_error <- c()
 
-for (k in 1:5) {
+for (k in 1:30) {
   if (k%%5 == 0) {
     #print(k)
   }
@@ -280,7 +280,7 @@ The missclassification error in the test set is 4\%, slightly higher than in the
 ```{r, echo = FALSE}
 
 cross_error <- c()
-for (k in 1:5) {
+for (k in 1:30) {
   if (k%%5 == 0) {
     #print(k)
   }
@@ -777,6 +777,7 @@ Formatting the report was mainly done by Aron.
 
 
 ```{r, ref.label=setdiff(knitr::all_labels(), c('setup')), echo=TRUE, eval=FALSE}
+
 
 
 ```
