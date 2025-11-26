@@ -1,0 +1,158 @@
+---
+title: "lab02_assignment1_block1"
+output: html_document
+date: "2025-11-26"
+---
+
+## Assignment 1
+```{r setup, include=FALSE}
+
+
+library(stringr)
+library(glmnet)
+
+data <- read.csv("tecator.csv")
+
+n=dim(data)[1]
+set.seed(12345)
+id=sample(1:n, floor(n*0.5))
+train=data[id,]
+
+# the ids not in id
+id1=setdiff(1:n, id)
+test=data[id1,]
+
+
+```
+
+# Q1
+The statistical assumption is that we assume normal residuals:
+$$\varepsilon = y-\hat{y} = y- X\beta$$ $$\varepsilon \sim N(0, \sigma^2)$$ then we simply perform MLE on f(y-XB) where f is the pdf for the normal distribution. 
+
+
+```{r, echo=FALSE}
+index <- str_detect(colnames(train), "(Channel)|(Fat)")
+model_linreg <- lm(Fat ~ ., train[, index])  
+summary(model_linreg)
+
+```
+
+
+```{r, echo=FALSE}
+MSE_t <- mean((model_linreg$fitted.values - train$Fat)^2)
+
+y_hat_test <- predict(model_linreg, test)
+
+mse_fun <- function(y_hat, y) {
+  mean((y - y_hat)^2)
+}
+
+print("Train MSE")
+MSE_t <- mse_fun(model_linreg$fitted.values, train$Fat)
+MSE_t
+print("Test MSE")
+MSE_test <- mse_fun(y_hat_test, test$Fat)
+MSE_test
+
+par(mfrow = c(1,2))
+hist(model_linreg$fitted.values - train$Fat, breaks = 20, main = "Residuals in train")
+hist(y_hat_test - test$Fat, breaks = 20, main = "Residuals in test")
+
+
+```
+\newline
+We see that the MSE is very low in the training set, model is extremely overfit as the MSE spikes in the validation set. In the validation set the model makes alot of very wrong predictions, considering that the median for Fat is `r median(train$Fat)`.
+
+# Q2
+
+For lasso regression we force the less important parameters to 0, this is because we add the L1 norm to the cost function.
+
+$$Cost =  \sum^n_{i=1}(\vec{y_i}-x_i^T\vec{\beta})+\lambda\sum^p_{j=1}|\beta_j| $$ 
+Where $x_i^T$ is the covariates for observation i. $\lambda$ is a hyperparameter controlling the strength of the lasso regularization.
+
+# Q3
+
+```{r, echo=FALSE}
+X_train <- model.matrix(Fat ~ ., train[, index])
+
+model_lasso <- glmnet(X_train, train$Fat, alpha = 1)
+
+
+
+plot(model_lasso)
+
+print("Channels are almost 1 to 1 correlated") 
+cor(X_train)[2:6, 2:6] %>% round(6) 
+```
+$\lambda = e^{-5} \leftrightarrow -log(\lambda) = 5$, for small $\lambda$ the regularization is weak and the coefficients are large, for larger $\lambda$ we see that all coefficients approach 0. An interesting pattern is that coefficients spike back up from 0. This is most probably because the correlation is so high. This means the model can't know if the signal is comming from Channel1 or Channel2 or a mix of them, if one coefficient drops the other one rises as the MSE drops from the signal being in the model.
+
+```{r, echo=FALSE}
+
+coefficients <- sapply(1:ncol(model_lasso$beta), function(x) nrow(model_lasso$beta) - sum(model_lasso$beta[, x] == 0))
+plot(model_lasso$lambda, coefficients)
+
+lambda_index <- which(coefficients <= 3) %>% max()
+
+print("Smallest lambda tested that results in 3 or fewer nonzero coefficients:")
+model_lasso$lambda[lambda_index]
+
+
+```
+# Q4
+
+```{r, echo=FALSE}
+model_ridge <- glmnet(X_train, train$Fat, alpha = 0)
+
+par(mfrow = c(1, 2))
+plot(model_lasso)
+plot(model_ridge)
+
+```
+Ridge shrinks all parameters at the same time while ridge tends to drop them to zero. This is because a reduction in a small coefficient, doesn't reduce the cost anything for L2 loss. For lasso, a reduction in a small coefficient is the same as reducing a large coefficient. $(10-\varepsilon)^2 >> (0.1 - \varepsilon)^2$ while $(10-\varepsilon) = (0.1 - \varepsilon)$.
+
+It doesn't make sense to select features with ridge, they do not drop to 0, on the top of the right plot we see the number of coefficients stays at 100 (this is not 101 because the intercept is 0, the intercept is included in the parametrization of the model).
+
+# Q5
+
+```{r, echo=FALSE}
+
+model_cross_val <- cv.glmnet(X_train, train$Fat, alpha = 1)
+plot(model_cross_val)
+
+best_index <- which.min(model_cross_val$cvm)
+
+print("Best lambda according to lowest mean CV-loss:")
+model_cross_val$lambda[best_index]
+print("log(lambda_optimal)")
+model_cross_val$lambda[best_index] %>% log()
+
+print("Amount of nonzero coefficients:")
+model_cross_val$nzero[best_index]
+
+
+
+```
+The CIs for -2.8 and -4 (2.8 and 4 in the plot) are overlapping so there is no statistically significant improvement.
+
+```{r, echo=FALSE}
+model_final <-glmnet(X_train, train$Fat, alpha = 1, lambda = model_cross_val$lambda[best_index])
+
+X_test <- model.matrix(Fat ~ ., test[, index])
+
+y_hat_test_lasso <- predict(model_final, X_test)
+plot(test$Fat, y_hat_test_lasso)
+abline(a = 0, b = 1, col = "red", lwd = 2)
+
+print("Test MSE")
+MSE_test <- mse_fun(y_hat_test_lasso, test$Fat)
+MSE_test  
+
+```
+The model seems much better than the original non-regularized model. The predictions look roughly evenly distributed around the x=y line, no systematic error. The test MSE is also way lower than before.
+
+
+## Assignment 4
+
+# Q1 
+What are the practical approaches for reducing the expected new data error, according to the book?
+Page 79-80: $E_{New} = E_{Train} + generalisation gap$. If the error in the test data is lower than the train error a better model could be used. The generalisation gap drops as n increases, assuming no systematic error in the sampling. During cross validation, if $E_{Holdout} \approx E{train}$ we should try to decrease $E_{Train}$ by making the model more complex. If $E_{Train}$ is very low and $E_{Holdout}$ is high we probably need more regularization, overfitting. There is nuance, for neural nets there are often many hyperarameters that control the regularization, they do not all perform the same, some are better for ceratain architectures. 
