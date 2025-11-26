@@ -670,6 +670,10 @@ where:
 - $f(\mathbf{x})$ is the current margin output from the ensemble classifier for the data point $\mathbf{x}$
 The product $y \cdot f(\mathbf{x})$ is known as the margin and indicates how confidently the classifier predicts the correct label.
 
+**Q3 Sketch how you would use cross-validation to select the number of components (or clusters) in unsupervised learning of GMMs.**
+
+Even though GMM learning is unsupervised, we can still do cross-validation. We simply treat the log-likelihood of held-out data as the validation score. To do this, we first split the dataset into training and validation parts (or k folds). Then, for each candidate number of components M, we train a GMM on the training portion using EM. Then we compute the held-out log-likelihood of the validation data under that model. Finally, we choose the M that gives the highest average held-out (cross-validated) likelihood (page 267).
+
 
 ## Appendix
 
