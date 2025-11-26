@@ -655,7 +655,7 @@ So each of the 10 models ends up nearly identical.When all models are similar, b
 # Assignment 4. THEORY.
 
 **Q1 In an ensemble model, is it true that the larger the number B of ensemble members, the more flexible the ensemble model?**
-
+Page 169:
 No, the bias stays constant, atleast for numerical Y. The model does not fit the data better, bagging is a variance reduction techinque aimed to reduce the variance stemming from the sampling variance, by averaging over multiple simulated bootstrap samples. Hence the flexibility isn't increased. 
 
 **Q2 In AdaBoost, what is the loss function used to train the boosted classifier at each iteration?** 
