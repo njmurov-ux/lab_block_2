@@ -7,7 +7,9 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(
-  echo = FALSE
+  echo = FALSE,
+  warning = FALSE,
+  message = FALSE 
 )
 
 ```
@@ -19,6 +21,7 @@ knitr::opts_chunk$set(
 
 ## Assignment 2. 
 
+### Task 1
 
 ```{r task_2_functions}
 #######################
@@ -53,6 +56,13 @@ id2=sample(id1, floor(n*0.3))
 valid=data[id2,]
 id3=setdiff(id1,id2)
 test=data[id3,]
+```
+
+After splitting the data into training/test/validation at the 40/30/30 ratio, we have `r nrow(train)`/`r nrow(valid)`/`r nrow(test)` rows in each respective dataset.
+
+### Task 2
+
+```{r}
 
 # a. Decision tree with default settings
 tree_default <- rpart(y ~ ., data = train, method = "class")
@@ -60,11 +70,20 @@ tree_default <- rpart(y ~ ., data = train, method = "class")
 # b. Decision tree with smallest allowed node size (minbucket) = 7000
 tree_minbucket <- rpart(y ~ ., data = train, method = "class", control = rpart.control(minbucket = 7000))
 
-# c. Decision tree with minimum deviance (minsplit) = 0.0005
-# Note: rpart's control parameter minsplit expects an integer; deviance threshold is controlled differently by 'cp'
-# To approximate minimum deviance, adjust 'cp' (complexity parameter)
+# c. Decision tree with minimum deviance (mindev) = 0.0005
+# Note: rpart does not have a mindev control parameter; deviance threshold is controlled differently by 'cp'
+# We first need to obtain the deviance at the root node and then calculate the ratio between our
+# absolute minimum deviance threshold of 0.0005 and that to use the output as the input to the cp
+# parameter in rpart
+
+tmp <- rpart(y ~ ., data = train, method = "class",
+             control = rpart.control(cp = 0.0, xval = 0))
+D_root <- tmp$frame$dev[1]  # deviance at the root node
+mindev_target <- 0.0005  # absolute deviance reduction we want
+cp_val <- mindev_target / D_root
+
 # tree_cp <- rpart(y ~ ., data = train, method = "class", control = rpart.control(cp = 0.0005))
-tree_cp <- rpart(y ~ ., data = train, method = "class", control = rpart.control(cp = 0.0005))
+tree_cp <- rpart(y ~ ., data = train, method = "class", control = rpart.control(cp = cp_val))
 
 misclass_rate <- function(model, data) {
   pred <- predict(model, newdata = data, type = "class")
@@ -149,17 +168,24 @@ print(num_splits)
 
 library(rpart.plot)
 
-# Set up a 1-row, 3-column layout
+# Plot 3 original trees side-by-side for comparison
 par(mfrow = c(1, 3))
 
-# Plot each tree in sequence
 rpart.plot(tree_default, main = "Default Settings")
 rpart.plot(tree_minbucket, main = "Minbucket = 7000")
 rpart.plot(tree_cp, main = "cp = 0.0005")
 
-# (Optional) reset layout to default after plotting
 par(mfrow = c(1, 1))
+```
 
+- Default: uses reasonable default parameters, only 1 split, relatively low bias and low variance
+- Min bucket 7000: no split at all as child nodes are all smaller than 7000. This is just assigning all instances to the dominant class
+- Min dev = 0.0005: Very many leaves, low bias but the highest variance, clear signs of overfitting. We need to prune this tree.
+
+
+### Task 3
+
+```{r}
 n_leaves <- function(fit) sum(fit$frame$var == "<leaf>")
 
 # helper: deviance on a dataset (negative log-lik up to a constant)
@@ -239,10 +265,6 @@ As the number of leaves increases, the training deviance decreases monotonically
 ```{r}
 # Variable importance
 sort(tree_opt$variable.importance, decreasing = TRUE)
-
-# Plot the tree for interpretation
-library(rpart.plot)
-rpart.plot(tree_opt, type = 2, extra = 104)
 ```
 
 - Most important: poutcome (outcome of previous marketing campaign) and month (month of contact).
@@ -263,7 +285,6 @@ models <- list(
   "Optimal 16-leaf" = tree_opt    # if you have your pruned tree
 )
 
-# build data.frame of train/valid misclassification
 misclass_df <- do.call(rbind, lapply(models, function(m) {
   c(
     Train = misclass_rate(m, train),
@@ -285,6 +306,20 @@ kable(
 )
 ```
 The 16‑leaf tree chosen by minimum validation deviance has essentially the same validation misclassification rate as the default tree that only splits on *poutcome*. However, the 16‑leaf tree achieves a lower validation deviance, indicating that its predicted probabilities are better calibrated and capture more nuanced structure in the data. In terms of the bias–variance tradeoff, it reduces bias (better fit) without noticeably reducing 0–1 error on the validation set.
+
+```{r}
+# Plot the tree for interpretation
+library(rpart.plot)
+rpart.plot(tree_opt, type = 2, extra = 104)
+```
+
+Key findings:
+
+- Previous campaign success is the single most informative variable, essentially splitting the population into a low‑propensity group and a high‑propensity group.
+
+- Timing matters: both within the non‑success and success groups, the specific month and day of contact have substantial influence, suggesting seasonality or within‑month effects in customer responsiveness.
+
+- Customer profile variables such as job and balance play a secondary, fine‑tuning role: they help pick out especially promising or unpromising subsegments but do not overturn the primary pattern driven by past outcome and timing.
 
 ## Assignment 3. 
 
