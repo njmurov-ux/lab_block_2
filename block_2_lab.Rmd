@@ -166,7 +166,7 @@ The reason for this is that lines parallell to the variable axis are drawn when 
 
 We are given three vectors of probabilities that defines the data-generating distribution for the cluster.
 
-```{r task_2_mixture_model}
+```{r, fig.dim = c(6, 4)}
 
 #######################
 #
@@ -174,7 +174,7 @@ We are given three vectors of probabilities that defines the data-generating dis
 #
 #######################
 
-# --- Data Generation (with cluster tracking) ---
+# --- Data Generation ---
 seed_value <- 1234567890
 set.seed(seed_value)
 n=1000 
@@ -193,40 +193,19 @@ points(true_mu[3,], type="o", col="green")
 
 Every single data point is a vector consisting of 10 separate binary features. Each feature can only be a 0 or a 1, representing the absence or presence of an attribute. While a K-Means centroid is the average position of points in a cluster, the mu vector in a Bernoulli mixture model is the probability of each feature being "1" (or "yes") for a member of that cluster. The core difference is that Bernoulli centroids define the probability of features, while Gaussian centroids define the location of the cluster's center. 
 
-After generating the training data, We can compress the original 10 dimensions to 2 using PCA (Principal Component Analysis) to demonstrate that it indeed forms 3 distinct clusters:
 
 ```{r task_2_training_data_generation}
-# This vector will store the true cluster for each point
-true_cluster_ids <- vector(length = n)
 
 # Generate the training data
 for(i in 1:n) {
   # Sample a cluster for the data point
   m <- sample(1:3, 1, prob = true_pi)
-  # Store the cluster id
-  true_cluster_ids[i] <- m
   # Generate the data point from the chosen cluster's distribution
   for(d in 1:D) {
     x[i,d] <- rbinom(1, 1, true_mu[m,d])
   }
 }
 
-# Plotting the Training Data with PCA
-pca_result <- prcomp(x, center = TRUE, scale. = TRUE)
-pca_plot_data <- as.data.frame(pca_result$x[, 1:2])
-colnames(pca_plot_data) <- c("PC1", "PC2")
-cluster_colors <- c("blue", "red", "green")
-plot(pca_plot_data$PC1, pca_plot_data$PC2,
-     main = "PCA of Training Data",
-     xlab = "First Principal Component (PC1)",
-     ylab = "Second Principal Component (PC2)",
-     pch = 19,  # Use solid circles for points
-     col = cluster_colors[true_cluster_ids]) # Assign colors based on true cluster IDs
-legend("bottomright",
-       legend = c("Cluster 1", "Cluster 2", "Cluster 3"),
-       col = cluster_colors,
-       pch = 19,
-       title = "True Cluster")
 ```
 
 ## Learning Bernoulli mixture model using EM algorithm
@@ -312,6 +291,8 @@ Where:
 *   $x_{i,d}$ is the value of the $d$-th dimension of the $i$-th data point.
 *   The denominator, $\sum_{i=1}^{n} w_{im}$, is the "effective" number of data points assigned to cluster $m$.
 
+\newpage
+
 ## Model fitting results
 
 ```{r task_2_functions}
@@ -396,12 +377,12 @@ em_algo <- function(M, x, seed=NULL) {
 
 plotting <- function(pi, mu, llik) {
   colors <- c("blue", "red", "green", "yellow")
-  # par(mfrow = c(2, 1))
+  par(mfrow = c(2, 1))
   plot(mu[1,], type="o", col="blue", ylim=c(0,1),
        main = "Final Cluster Centroids (mu)",
        xlab = "Dimension",
        ylab = "Probability")
-  # grid()
+
 
   for (j in 2:nrow(mu)) {
     points(mu[j,], type="o", col=colors[j])
@@ -412,9 +393,8 @@ plotting <- function(pi, mu, llik) {
        main = "Log-Likelihood Convergence",
        xlab = "Iteration",
        ylab = "Log-Likelihood")
-  # grid()
-  
-  # par(mfrow = c(1, 1))
+  par(mfrow = c(1, 1))
+
 }
 
 run_and_plot <- function(M, x, seed_value) {
@@ -434,28 +414,32 @@ all_models <- list()
 
 ### Fitting results for 2 clusters
 
-```{r task_2_fitting_2_clusters}
+```{r , fig.dim = c(5, 7)}
 M=2 # number of clusters
 all_models[[as.character(M)]] <- run_and_plot(M, x, seed_value)
 ```
+\newpage
 
 ### Fitting results for 3 clusters
 
-```{r task_2_fitting_3_clusters}
+```{r, fig.dim = c(5, 7)}
 M=3 # number of clusters
 all_models[[as.character(M)]] <- run_and_plot(M, x, seed_value)
 ```
+\newpage
 
 ### Fitting results for 4 clusters
 
-```{r task_2_fitting_4_clusters}
+```{r, fig.dim = c(5, 7)}
 M=4 # number of clusters
 all_models[[as.character(M)]] <- run_and_plot(M, x, seed_value)
 ```
 
+\newpage
+
 ### Analysis
 
-The above plots do not necessarily provide good insights into which number of clusters gives the best fit to the training data. We can say that the model with 3 clusters gives the best fit because the $\mu$ plot is similar to the original one we used for generating the data but in real life we won't have access to it. Therefore we need more objective criteria for model selection.
+The above plots do not necessarily provide good insights into which number of clusters gives the best fit to the training data. We can say that the model with 3 clusters gives the best fit because the $\mu$ plot is similar to the original one we used for generating the data but in real life we wouldn't have access to it. Therefore we need more objective criteria for model selection.
 
 **Akaike Information Criterion (AIC)** and **Bayesian Information Criterion (BIC)** are standard tools for model selection. They balance model fit (log-likelihood) with model complexity (number of parameters). The model with the lowest AIC or BIC is considered the best.
 
@@ -677,7 +661,6 @@ Even though GMM learning is unsupervised, we can still do cross-validation. We s
 
 ## Appendix
 
-All code
 
 ```{r, ref.label=setdiff(knitr::all_labels(), c('setup')), echo=TRUE, eval=FALSE}
 ```
