@@ -2,9 +2,7 @@
 title: "Block 1 Lab 2 report"
 author: 'Group B13: Aron(aroen488), Sergey(servo519), Shahin(mdpa888)'
 date: "2025-11-26"
-output:
-  html_document: default
-  pdf_document: default
+output: pdf_document
 ---
 
 ```{r setup, include=FALSE}
@@ -17,7 +15,10 @@ knitr::opts_chunk$set(
 ```
 ## Statement of Contribution
 
-
+Assignment 1 was mainly contributed by Aron. 
+Assignment 2 was mainly contributed by Sergey. 
+Assignment 3 was mainly contributed by Shahin.
+Theory questions: Q1: Aron, Q2: Sergey, Q3: Shahin.
 
 ## Assignment 1. 
 
@@ -25,7 +26,7 @@ knitr::opts_chunk$set(
 
 ### Task 1
 
-```{r task_2_functions}
+```{r t2_1}
 #######################
 #
 # TASK 2 CODE
@@ -47,7 +48,7 @@ for (col in categorical_cols) {
   data[[col]] <- factor(data[[col]], levels = unique(data[[col]]))
 }
 
-str(data)  # to check data structure
+# str(data)  # to check data structure
 n=dim(data)[1]
 set.seed(12345) 
 id=sample(1:n, floor(n*0.4)) 
@@ -64,7 +65,7 @@ After splitting the data into training/test/validation at the 40/30/30 ratio, we
 
 ### Task 2
 
-```{r}
+```{r t2_2}
 
 # a. Decision tree with default settings
 tree_default <- rpart(y ~ ., data = train, method = "class")
@@ -117,7 +118,6 @@ print(results)
 # 
 # tree_mindev <- tree(y ~ ., data = train, control = tree.control(nobs = nrow(train), mindev = 0.0005))
 # 
-# # Function to calculate misclassification rate
 # misclass_rate <- function(model, data) {
 #   pred <- predict(model, newdata = data, type = "class")
 #   mean(pred != data$y)
@@ -136,7 +136,6 @@ print(results)
 # 
 # print(results)
 # 
-# # Count number of splits for each tree
 # num_splits_default  <- sum(!tree_default$frame$var == "<leaf>")
 # num_splits_minsize  <- sum(!tree_minsize$frame$var == "<leaf>")
 # num_splits_mindev   <- sum(!tree_mindev$frame$var == "<leaf>")
@@ -145,10 +144,8 @@ print(results)
 # cat("Minsize 7000 tree splits:", num_splits_minsize, "\n")
 # cat("MinDev k=0.0005 tree splits:", num_splits_mindev, "\n")
 # 
-# # In R, set multi-plot window for side-by-side plots
 # par(mfrow = c(1, 3))
 # 
-# # Plot each tree, with split count in the title
 # plot(tree_default, main = paste("Default\nSplits:", num_splits_default))
 # text(tree_default, cex=0.7)
 # 
@@ -158,7 +155,6 @@ print(results)
 # plot(tree_mindev, main = paste("MinDev=0.0005\nSplits:", num_splits_mindev))
 # text(tree_mindev, cex=0.7)
 # 
-# # Reset plotting window
 # par(mfrow = c(1, 1))
 num_splits <- c(
   Default = length(tree_default$frame$var[tree_default$frame$var != "<leaf>"]),
@@ -187,7 +183,7 @@ par(mfrow = c(1, 1))
 
 ### Task 3
 
-```{r}
+```{r t2_3}
 n_leaves <- function(fit) sum(fit$frame$var == "<leaf>")
 
 # helper: deviance on a dataset (negative log-lik up to a constant)
@@ -264,7 +260,7 @@ Here
 As the number of leaves increases, the training deviance decreases monotonically, while the validation deviance initially decreases and then increases, forming a U‑shaped curve. For very small trees (few leaves), both training and validation deviances are high, indicating underfitting and high bias. As we allow more leaves, the model becomes more flexible, bias decreases, and validation deviance improves, reaching its minimum at 16 leaves. Beyond 16 leaves, further increases in tree size continue to reduce training deviance but lead to higher validation deviance, which indicates that additional complexity mainly increases variance and causes overfitting. Thus a tree with 16 leaves provides the best bias–variance tradeoff.
 
 
-```{r}
+```{r t2_3_1}
 # Variable importance
 sort(tree_opt$variable.importance, decreasing = TRUE)
 ## To get percentage variables:
@@ -285,7 +281,7 @@ Variable importance in rpart is based on how much each variable reduces the node
 
 The tree mainly bases its decisions on past campaign outcome and timing of the contact, with customer/job characteristics playing a smaller role.
 
-```{r}
+```{r t2_3_2}
 models <- list(
   "Default"        = tree_default,
   "Minbucket 7000" = tree_minbucket,
@@ -315,7 +311,7 @@ kable(
 ```
 The 16‑leaf tree chosen by minimum validation deviance has essentially the same validation misclassification rate as the default tree that only splits on *poutcome*. However, the 16‑leaf tree achieves a lower validation deviance, indicating that its predicted probabilities are better calibrated and capture more nuanced structure in the data. In terms of the bias–variance tradeoff, it reduces bias (better fit) without noticeably reducing 0–1 error on the validation set.
 
-```{r}
+```{r t2_3_3}
 # Plot the tree for interpretation
 library(rpart.plot)
 rpart.plot(tree_opt, type = 2, extra = 104)
@@ -331,7 +327,7 @@ Key findings:
 
 ### Task 4
 
-```{r}
+```{r t2_4}
 
 format_cm <- function(cm) {
   # positive class is "yes" and negative is "no"
@@ -401,7 +397,7 @@ Therefore despite a high overall accuracy driven by the majority “no” class,
 
 ### Task 5
 
-```{r}
+```{r t2_5}
 loss_mat <- matrix(
   c(0, 1,   # observed = "no":  pred "no", pred "yes"
     5, 0),  # observed = "yes": pred "no", pred "yes"
@@ -442,10 +438,20 @@ As could be expected, when using a custom loss function that penalizes false neg
 
 ### Task 6
 
-```{r}
+```{r t2_6}
 library(dplyr)
 
 prob_yes_tree <- predict(tree_opt, newdata = test, type = "prob")[, "yes"]
+
+# Fit logistic regression (binomial GLM with logit link)
+logit_fit <- glm(
+  y ~ .,
+  data   = train,
+  family = binomial(link = "logit")
+)
+
+# summary(logit_fit)
+prob_yes_logit <- predict(logit_fit, newdata = test, type = "response")
 
 pi_grid <- seq(0.05, 0.95, by = 0.05)
 
@@ -469,17 +475,84 @@ roc_tree <- t(sapply(pi_grid, metrics_at_threshold,
                      y_true = test$y, p_yes = prob_yes_tree))
 roc_tree <- as.data.frame(roc_tree)
 
-print(roc_tree)
 
-plot(roc_tree$FPR, roc_tree$TPR, type = "b", pch = 19,
+# ROC data for logistic regression
+roc_logit <- as.data.frame(
+  t(sapply(pi_grid, metrics_at_threshold,
+           y_true = test$y, p_yes = prob_yes_logit))
+)
+
+plot(roc_tree$FPR, roc_tree$TPR, type = "b", pch = 19, col = "blue",
      xlab = "False Positive Rate (FPR)",
      ylab = "True Positive Rate (TPR)",
-     main = "ROC curve for optimal tree (tree_opt)")
+     main = "ROC curves: tree_opt vs logistic regression",
+     xlim = c(0, 1), ylim = c(0, 1))
+
+lines(roc_logit$FPR, roc_logit$TPR, type = "b", pch = 17, col = "red")
+
 abline(0, 1, lty = 2, col = "grey")
-text(roc_tree$FPR, roc_tree$TPR,
-     labels = round(roc_tree$threshold, 2),
-     pos = 4, cex = 0.6)
+legend("bottomright",
+       legend = c("Tree (tree_opt)", "Logistic regression"),
+       col    = c("blue", "red"),
+       pch    = c(19, 17),
+       bty    = "n")
 ```
+The ROC plot shows that, while both models are clearly better than random (their curves lie well above the diagonal), the logistic regression curve (red) is consistently above or equal to the tree curve (blue), so for almost every operating point it achieves a higher TPR for the same FPR, i.e. it dominates the tree in ROC space. This suggests that, as probabilistic classifiers, the logistic regression model has better overall ability to separate “yes” from “no” than the optimal tree.
+
+At the same time, it should be noted that ROC curves treat TPR and FPR symmetrically and do not depend on class prevalence, so a model can look good in ROC space even when the positive class is very rare and performance on that class is mediocre. By contrast, precision–recall (PR) curves focus only on the positive class with the recall being equal to the TPR and the precision showing the fraction of predicted “yes” that are truly “yes”.
+
+In your case, where we observe a significant imbalance between "yes" and "no" responses (with "nO" responses accounting for about 89% of the data), the precision-recall curve is indeed a better choice than relying on ROC alone as it will give a clearer view of how well each model retrieves the “yes” class at acceptable false‑alert rates.
+
+```{r t2_6_1}
+pr_at_threshold <- function(thresh, y_true, p_yes) {
+  pred_yes <- p_yes > thresh
+  y_pos    <- y_true == "yes"
+  y_neg    <- y_true == "no"
+  
+  tp <- sum(pred_yes & y_pos)
+  fp <- sum(pred_yes & y_neg)
+  fn <- sum(!pred_yes & y_pos)
+  
+  precision <- ifelse(tp + fp == 0, NA, tp / (tp + fp))
+  recall    <- ifelse(tp + fn == 0, NA, tp / (tp + fn))  # = TPR
+  
+  c(threshold = thresh, Precision = precision, Recall = recall)
+}
+
+
+pr_tree <- as.data.frame(
+  t(sapply(pi_grid, pr_at_threshold,
+           y_true = test$y, p_yes = prob_yes_tree))
+)
+
+pr_logit <- as.data.frame(
+  t(sapply(pi_grid, pr_at_threshold,
+           y_true = test$y, p_yes = prob_yes_logit))
+)
+
+plot(pr_tree$Recall, pr_tree$Precision, type = "b", pch = 19, col = "blue",
+     xlab = "Recall",
+     ylab = "Precision",
+     xlim = c(0, 1), ylim = c(0, 1),
+     main = "Precision–Recall curves: tree_opt vs logistic regression")
+
+lines(pr_logit$Recall, pr_logit$Precision, type = "b", pch = 17, col = "red")
+
+legend("topright",
+       legend = c("Tree (tree_opt)", "Logistic regression"),
+       col    = c("blue", "red"),
+       pch    = c(19, 17),
+       bty    = "n")
+
+text(pr_tree$Recall, pr_tree$Precision,
+     labels = round(pr_tree$threshold, 2),
+     pos = 4, cex = 0.6, col = "blue")
+
+text(pr_logit$Recall, pr_logit$Precision,
+     labels = round(pr_logit$threshold, 2),
+     pos = 4, cex = 0.6, col = "red")
+```
+The precision-recall curve shown above demonstrates that by lowering the cutoff probability, we can achieve higher recall at the expense of lower precision and vice versa depending on the business goals. 
 
 
 ## Assignment 3. 
@@ -488,7 +561,7 @@ text(roc_tree$FPR, roc_tree$TPR,
 ## Assignment 4. 
 
 
-
+**Q2: What important aspect should be considered when selecting minibatches, according to the book?** p.125: When using mini‑batches, each batch should be constructed so that it roughly reflects the overall class distribution and diversity of the full dataset. If the data are ordered by class and the first $n_b$ examples all belong to a single class, the first mini‑batch will contain only that class and its gradient will be a poor stand‑in for the gradient on the whole dataset. To avoid this problem, mini‑batches should be formed by randomly sampling or shuffling the data before splitting into batches.
 
 
 ## Appendix
