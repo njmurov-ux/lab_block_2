@@ -21,13 +21,11 @@ Assignment 3 was mainly contributed by Shahin.
 Theory questions: Q1: Aron, Q2: Sergey, Q3: Shahin.
 
 ## Assignment 1.
-```{r setup, include=FALSE}
-
-
+```{r, echo=FALSE}
 library(stringr)
 library(glmnet)
 
-data <- read.csv("tecator.csv")
+data <- read.csv("data/tecator.csv")
 
 n=dim(data)[1]
 set.seed(12345)
@@ -37,8 +35,6 @@ train=data[id,]
 # the ids not in id
 id1=setdiff(1:n, id)
 test=data[id1,]
-
-
 ```
 
 # Q1
@@ -699,7 +695,276 @@ text(pr_logit$Recall, pr_logit$Precision,
 The precision-recall curve shown above demonstrates that by lowering the cutoff probability, we can achieve higher recall at the expense of lower precision and vice versa depending on the business goals. 
 
 
-## Assignment 3. 
+## Assignment 3. Principal components and implicit regularization
+
+
+## 3.1
+```{r 3.1, echo=FALSE}
+library(ggplot2)
+set.seed(12345)
+######################  Assignment 3.1 #########################################
+data <- read.csv("data/communities.csv",header = TRUE, sep = ",")
+
+# Remove response
+features <- data[, setdiff(names(data), "ViolentCrimesPerPop")]
+
+# Scale predictors
+scaled_features <- scale(features)
+
+# Covariance matrix
+S <- cov(scaled_features)
+
+# Eigen decomposition
+eig <- eigen(S)
+
+
+# proportion of variation explained by each of the first 100 components
+
+lambda <- eig$values
+exp_var <- lambda / sum(lambda)       # proportion of variance explained
+cum_var <- cumsum(exp_var)            # cumulative proportion
+q_95 <- which(cum_var >= 0.95)[1]     # first PC reaching 95%
+
+# plot
+plot(exp_var, type = "p", 
+     xlab = "Component", 
+     ylab = "Proportion of variation explained", 
+     main = "Proportion of variation explained by each of the first 100 components")
+
+
+cat("Number of components needed for 95% variance:", q_95, "\n")
+cat("Proportion of variation explained by the first component:", lambda[1] / sum(lambda), "\n")
+cat("Proportion of variation explained by the second component:", lambda[2] / sum(lambda), "\n")
+
+```
+
+According to the output, we need 35 components to obtain at least 95% of the variance in the data. 
+The proportion of variation explained by the first and second principal components are 0.2501699 and 0.1693597 respectively.
+
+
+## 3.2
+
+```{r 3.2.1, echo=FALSE}
+######################  Assignment 3.2 #########################################
+PCA <- princomp(scaled_features, cor = TRUE)
+
+# 1. TRACE PLOT OF FIRST PC
+plot(PCA$loadings[,1],
+     type = "l",  # vertical lines
+     main = "Trace Plot: Loadings for PC1",
+     xlab = "Feature Index",
+     ylab = "PC1 Loading")
+
+
+
+```
+
+From the plot, we found that PC1 is influenced by many features, but a small group of variables dominates the pattern.
+
+The 5 most contributed features are:
+
+```{r 3.2.2, echo=FALSE}
+# 2. TOP 5 FEATURES CONTRIBUTING TO PC1
+
+# Extract PC1 loadings
+pc1_loadings <- PCA$loadings[,1]
+
+# Sort by absolute value
+top5_pc1 <- sort(abs(pc1_loadings), decreasing = TRUE)[1:5]
+
+cat("Top 5 PC1 contributors (absolute loadings):\n")
+print(top5_pc1)
+```
+
+medFamInc(median family income): median family income has a relationship with crime  example, low-income parents with kids
+
+medIncome(median household income): median household income is almost the same as medFamInc
+
+PctKids2Par(percentage of kids in family housing with two parents): family stability - kids with two parents are more likely to be well-educated and have a good life, so they are less likely to commit crimes. 
+
+pctWInvInc(percentage of households with investment / rent income in 1989): people with investment/rent income are more likely to be rich, and they are less likely to commit crimes. 
+
+PctPopUnderPov(percentage of people under the poverty level): people under the poverty level are more likely to commit crimes because they need money to survive.
+
+Lower income, more poverty, and weaker family stability are well-established predictors of higher violent crime. This suggests PC1 behaves like a socioeconomic disadvantage factor.
+
+
+```{r 3.2.3, echo=FALSE}
+
+# 3. GET PC SCORES FOR PC1 & PC2
+
+scores <- as.data.frame(PCA$scores)[,1:2]
+colnames(scores) <- c("PC1", "PC2")
+
+# Add crime back into scores
+crime <- data$ViolentCrimesPerPop
+scores$Crime <- crime
+
+print(head(scores[, c("PC1", "PC2", "Crime")], 10))
+
+# 4. PC1–PC2 SCORE PLOT (COLORED BY CRIME)
+ggplot(scores, aes(x = PC1, y = PC2, color = Crime)) +
+  geom_point(alpha = 0.8) +
+  scale_color_gradient(low = "blue", high = "yellow") +
+  theme_minimal() +
+  labs(
+    title = "PCA Score Plot: PC1 vs PC2",
+    x = "PC1 (Socioeconomic)",
+    y = "PC2 (Immigration / Density)",
+    color = "Crime Rate"
+  )
+```
+
+The PC1–PC2 score plot shows a clear gradient in crime levels.
+High-crime communities lie in the region of high PC1 values, corresponding to poverty, low income, and low education.
+Low-crime communities cluster in the opposite direction, where socioeconomic conditions are better.
+PC2 adds additional variation related to immigration and population density, but plays a secondary role compared to PC1.
+
+## 3.3
+
+```{r 3.3,echo=FALSE}
+######################  Assignment 3.3 #########################################
+# Train and test data
+n <- nrow(data)
+set.seed(12345)
+id <- sample(1:n, floor(n*0.5))
+train_set <- data[id,]
+test_set <- data[-id,]
+
+# -------------------------------
+# 2. Scale features AND target
+# -------------------------------
+
+# function that returns scaled data AND retains mean/sd for later
+scale_data <- function(df) {
+  mu <- sapply(df, mean)
+  sd <- sapply(df, sd)
+  scaled <- as.data.frame(scale(df, center = mu, scale = sd))
+  list(data = scaled, mean = mu, sd = sd)
+}
+
+# scale training set
+train_scaled <- scale_data(train_set)
+train_dat <- train_scaled$data
+
+# scale test WITH training mean/sd
+test_dat <- as.data.frame(
+  scale(test_set,
+        center = train_scaled$mean,
+        scale = train_scaled$sd)
+)
+
+# -------------------------------
+# 3. Fit linear regression
+# -------------------------------
+
+model <- lm(ViolentCrimesPerPop ~ ., data = train_dat)
+
+# -------------------------------
+# 4. Compute training & test MSE
+# -------------------------------
+
+# predictions
+train_pred <- predict(model, train_dat)
+test_pred  <- predict(model, test_dat)
+
+# mean squared errors
+train_mse <- mean((train_dat$ViolentCrimesPerPop - train_pred)^2)
+test_mse  <- mean((test_dat$ViolentCrimesPerPop - test_pred)^2)
+
+cat("Train mean squared error:", train_mse)
+cat("Test mean squared error:", test_mse)
+```
+
+A test MSE of 0.425 is significantly larger than 0.275.
+
+This indicates:
+
+- Overfitting:
+The model captures patterns specific to the training sample, not general patterns.
+
+- High dimensionality:
+The dataset has hundreds of features, and linear regression struggles with so many predictors.
+
+## 3.4
+
+```{r 3.4.1,echo=FALSE,cache=TRUE}
+###################### Assignment 3.4 #########################################
+
+# Prepare design matrices without intercept
+X_train <- model.matrix(ViolentCrimesPerPop ~ . - 1, train_dat)
+X_test  <- model.matrix(ViolentCrimesPerPop ~ . - 1, test_dat)
+
+y_train <- train_dat$ViolentCrimesPerPop
+y_test  <- test_dat$ViolentCrimesPerPop
+
+p <- ncol(X_train)
+
+train_err <- list()
+test_err <- list()
+
+i <<- 1     # counter must be global
+
+cost_fun <- function(theta_vec){
+
+  theta <- matrix(theta_vec, ncol = 1)
+
+  # predictions
+  pred_train <- X_train %*% theta
+  pred_test  <- X_test  %*% theta
+
+  # MSE
+  train_mse <- mean((y_train - pred_train)^2)
+  test_mse  <- mean((y_test  - pred_test )^2)
+
+  # store errors
+  train_err[[i]] <<- train_mse
+  test_err[[i]]  <<- test_mse
+  i <<- i + 1
+
+  return(train_mse)   # BFGS minimizes training MSE
+}
+
+theta0 <- rep(0, p)
+
+opt <- optim(theta0, fn = cost_fun, method = "BFGS",
+             control = list(maxit = 3000))
+
+# convert lists to numeric
+train_vec <- as.numeric(train_err)
+test_vec  <- as.numeric(test_err)
+
+# drop first 500 iterations for clarity
+start <- 500
+
+plot(train_vec[start:length(train_vec)], type="l", col="red",
+     ylim = range(c(train_vec[start:length(train_vec)],
+                    test_vec[start:length(test_vec)])),
+     xlab="Iteration", ylab="MSE", 
+     main="Training vs Test MSE During BFGS Optimization")
+
+lines(test_vec[start:length(test_vec)], col="blue")
+abline(v = which.min(test_vec) - start, col="green")
+
+legend("topright", legend=c("Train MSE","Test MSE"),
+       col=c("red","blue"), lty=1, cex=0.8)
+
+best_iter <- which.min(test_vec)
+
+cat("Iteration for early stopping:", best_iter, "\n")
+cat("Train mean squared error:", train_vec[best_iter], "\n")
+cat("Test mean squared error:",  test_vec[best_iter],  "\n")
+
+
+```
+
+The plot shows how the training and test errors change during the BFGS optimization. At first, both errors are unstable, so we ignore the first 500 iterations. After that, the training error keeps decreasing, but the test error goes down and then starts to rise again. The best model is the one where the test error is smallest, which happens at iteration 2182. This is where we stop (early stopping) to avoid overfitting.
+
+***Comparing Step 3 and Step 4***
+
+In Step 3, the model fits the training data very well (MSE = 0.275), but the test error is noticeably higher (0.425), meaning it overfits.
+In Step 4, using early stopping, the training error is a little worse (0.303), but the test error improves to 0.400.
+This means early stopping prevents overfitting and gives a model that works better on new data.
 
 
 ## Assignment 4. 
@@ -708,6 +973,9 @@ The precision-recall curve shown above demonstrates that by lowering the cutoff 
 Page 79-80: $E_{New} = E_{Train} + generalisation gap$. If the error in the test data is lower than the train error a better model could be used. The generalisation gap drops as n increases, assuming no systematic error in the sampling. During cross validation, if $E_{Holdout} \approx E{train}$ we should try to decrease $E_{Train}$ by making the model more complex. If $E_{Train}$ is very low and $E_{Holdout}$ is high we probably need more regularization, overfitting. There is nuance, for neural nets there are often many hyperarameters that control the regularization, they do not all perform the same, some are better for ceratain architectures. 
 
 **Q2: What important aspect should be considered when selecting minibatches, according to the book?** p.125: When using mini‑batches, each batch should be constructed so that it roughly reflects the overall class distribution and diversity of the full dataset. If the data are ordered by class and the first $n_b$ examples all belong to a single class, the first mini‑batch will contain only that class and its gradient will be a poor stand‑in for the gradient on the whole dataset. To avoid this problem, mini‑batches should be formed by randomly sampling or shuffling the data before splitting into batches.
+
+**Q3: Provide an example of modifications in a loss function and in data that can be done to take into account the data imbalance, according to the book?**
+According to page 300 of the book, data imbalance can be addressed in two main ways. First, the loss function can be modified by assigning higher weights to data points from the minority or more important class, making their misclassification more costly. Second, the data itself can be adjusted by upsampling the minority-class examples so they appear more frequently during training. These two approaches help the model focus more on underrepresented classes and improve performance on imbalanced datasets.
 
 
 ## Appendix
