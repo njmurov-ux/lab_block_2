@@ -1,0 +1,139 @@
+---
+title: "lab3"
+output: html_document
+date: "2025-12-09"
+---
+
+# Theroy Q1
+Page 194: If x is used in the model only as dotproducts, we can use the kernel for phi(x)phi(x)^T. The kernel could be easier to calculate, the polynomial basis has closed form so we do not need to project into higher-dimensional space.  
+
+
+```{r}
+set.seed(1234567890)
+library(geosphere)
+stations <- read.csv("stations.csv", fileEncoding = "latin1")
+temps <- read.csv("temps50k.csv")
+st <- merge(stations,temps,by="station_number")
+h_distance <- # These three values are up to the students
+h_date <-
+h_time <-
+#this is linköping
+latitude <- 58.4274 # The point to predict (up to the students)
+longitude <- 14.826
+
+# documentation says first one is longitud
+# distance is in meters, i checked externally
+distance_to_station <- sapply(1:nrow(st), function(x) distHaversine(c(st$longitude[x], st$latitude[x]), c(longitude, latitude)))
+
+st$distance <- distance_to_station
+```
+
+
+
+```{r}
+
+
+st$date <- st$date |> as.Date()
+
+
+# christmas 2008
+date_of_interest <- "2008-12-24" |> as.Date()
+
+times <- seq(4, 24, by = 2) |> as.character()
+times <- sapply(1:length(times), 
+                function(x) {
+  if(nchar(times[x]) == 1){return(paste0("0", times[x]))} 
+                return(times[x])}
+  )
+times <- paste0(times, ":00:00")
+temp <- vector(length=length(times))
+temp_mult <- vector(length=length(times))
+
+for (i in seq_along(times)) {
+  hour_of_interest <- times[i]
+  numeric_hour_of_interest <- substr(hour_of_interest, 1, 2) |> as.numeric()
+
+date_diff <- difftime(date_of_interest, st$date) |> as.numeric()
+st$day_diff <- date_diff 
+
+# negative happen after our date_of_interest
+posterior_index1 <- date_diff < 0
+
+
+# inefficient code but sufficient, if clean use lubridate
+same_day <- st$date == date_of_interest 
+hour_later <- (substr(st$time, 1, 2) |> as.numeric()) > numeric_hour_of_interest
+
+posterior_index2 <- hour_later & same_day
+
+posterior_index <- posterior_index1 | posterior_index2
+
+
+prior_df <- st[!posterior_index, ]
+
+
+# time is cyclic, so if we want to have hour of day as a variable, 
+# similar times to 23 are both 21 and 01...
+hour_fun <- function(x, y) {
+  delta <- abs(x - y)
+  
+  if (delta <= 12) {
+    return(delta)
+  } else {
+    if (x < y) {
+      
+      return( abs((x + 24) - y) )
+      
+    } else {
+      return( abs((y + 24) - x) )
+    }
+    
+  }
+  
+}
+
+
+prior_df$delta_t <- sapply(1:nrow(prior_df), function(x) hour_fun(numeric_hour_of_interest, prior_df$time[x] |> substr(1, 2) |> as.numeric()))
+
+# small h makes the distance larger
+h_distance <- sd(prior_df$distance) * 0.001
+h_date <- sd(prior_df$day_diff) * 0.001
+h_time <- sd(prior_df$delta_t) * 0.001
+
+# too large h means it converges to the mean
+# mean(prior_df$air_temperature)
+
+K1 <- sum(dnorm(prior_df$distance / h_distance) * prior_df$air_temperature) / sum(dnorm(prior_df$distance / h_distance))
+
+K2 <- sum(dnorm(prior_df$day_diff / h_date) * prior_df$air_temperature) / sum(dnorm(prior_df$day_diff / h_date))
+
+K3 <- sum(dnorm(prior_df$delta_t / h_time) * prior_df$air_temperature) / sum(dnorm(prior_df$delta_t / h_time))
+
+prediction <- mean(c(K1, K2, K3))
+
+x <- (K1*K2*K3)
+prediction_mult <- sign(x) * abs(x)^(1/3)
+
+temp[i] <- prediction
+temp_mult[i] <- prediction_mult
+
+# loop end
+# -------------------
+}
+
+plot(temp, type="o")
+plot(temp_mult, type="o")
+
+curve(dnorm(x), from = 0, to = 10)
+
+```
+The widths are picked like this, smaller h means we put less impact on points further away. It is scaled by standard deviation, otherwise everything gets pushed to 0 for distance for example. 
+
+h_distance <- sd(prior_df$distance) * 0.1
+h_date <- sd(prior_df$day_diff) * 0.1
+h_time <- sd(prior_df$delta_t) * 0.1
+
+
+It is worth noting that these predictions are very poor, I tried a data in the summer and got values below 10 degrees. 
+
+The weight from the kernel decays with distance. 
