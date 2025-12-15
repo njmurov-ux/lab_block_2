@@ -22,18 +22,167 @@ Theory questions: Q1: Aron, Q2: Shahin, Q3: Sergey.
 
 ## Assignment 1. THEORY
 
-**Q1: What is the kernel trick?**
+**Q1: What is the kernel trick?** Page 194: If x is used in the model only as dotproducts, we can use the kernel for phi(x)phi(x)^T. The kernel could be easier to calculate, the polynomial basis has closed form so we do not need to project into higher-dimensional space.
 
 **Q2: In the literature, it is common to see a formulation of SVMs that makes use of a hyperparameter
 C. What is the purpose of this hyperparameter?**
 
-**Q3: In neural networks, what do we mean by mini-batch and epoch?** p. 125: A *mini-batch* is a small subset of the full dataset, typically containing $n_b = 10$, $n_b = 100$, or $n_b = 1{,}000$ observations.
+**Q3: In neural networks, what do we mean by mini-batch and epoch?** Page 125: A *mini-batch* is a small subset of the full dataset, typically containing $n_b = 10$, $n_b = 100$, or $n_b = 1{,}000$ observations.
 
 A single complete pass through the entire training dataset is referred to as an *epoch*. Each epoch therefore consists of $n / n_b$ iterations.
 
 
 ## Assignment 2. KERNEL METHODS
+
+```{r 2_1}
+#######################
+#
+# ASSIGNMENT 2 CODE
+#
+#######################
+set.seed(1234567890)
+library(geosphere)
+stations <- read.csv("data/stations.csv", fileEncoding = "latin1")
+temps <- read.csv("data/temps50k.csv")
+st <- merge(stations,temps,by="station_number")
+h_distance <- # These three values are up to the students
+h_date <-
+h_time <-
+#this is linköping
+latitude <- 58.4274 # The point to predict (up to the students)
+longitude <- 14.826
+
+# documentation says first one is longitude
+# distance is in meters, i checked externally
+distance_to_station <- sapply(1:nrow(st), function(x) distHaversine(c(st$longitude[x], st$latitude[x]), c(longitude, latitude)))
+
+st$distance <- distance_to_station
+```
+
+
+
+```{r 2_2}
+
+
+st$date <- st$date |> as.Date()
+
+
+# christmas 2008
+date_of_interest <- "2008-12-24" |> as.Date()
+
+times <- seq(4, 24, by = 2) |> as.character()
+times <- sapply(1:length(times), 
+                function(x) {
+  if(nchar(times[x]) == 1){return(paste0("0", times[x]))} 
+                return(times[x])}
+  )
+times <- paste0(times, ":00:00")
+temp <- vector(length=length(times))
+temp_mult <- vector(length=length(times))
+
+for (i in seq_along(times)) {
+  hour_of_interest <- times[i]
+  numeric_hour_of_interest <- substr(hour_of_interest, 1, 2) |> as.numeric()
+
+date_diff <- difftime(date_of_interest, st$date) |> as.numeric()
+st$day_diff <- date_diff 
+
+# negative happen after our date_of_interest
+posterior_index1 <- date_diff < 0
+
+
+# inefficient code but sufficient, if clean use lubridate
+same_day <- st$date == date_of_interest 
+hour_later <- (substr(st$time, 1, 2) |> as.numeric()) > numeric_hour_of_interest
+
+posterior_index2 <- hour_later & same_day
+
+posterior_index <- posterior_index1 | posterior_index2
+
+
+prior_df <- st[!posterior_index, ]
+
+
+# time is cyclic, so if we want to have hour of day as a variable, 
+# similar times to 23 are both 21 and 01...
+hour_fun <- function(x, y) {
+  delta <- abs(x - y)
+  
+  if (delta <= 12) {
+    return(delta)
+  } else {
+    if (x < y) {
+      
+      return( abs((x + 24) - y) )
+      
+    } else {
+      return( abs((y + 24) - x) )
+    }
+    
+  }
+  
+}
+
+
+prior_df$delta_t <- sapply(1:nrow(prior_df), function(x) hour_fun(numeric_hour_of_interest, prior_df$time[x] |> substr(1, 2) |> as.numeric()))
+
+# small h makes the distance larger
+h_distance <- sd(prior_df$distance) * 0.1
+h_date <- sd(prior_df$day_diff) * 0.1
+h_time <- sd(prior_df$delta_t) * 0.1
+
+# too large h means it converges to the mean
+# mean(prior_df$air_temperature)
+
+a <- sum(dnorm(prior_df$distance / h_distance) * prior_df$air_temperature) + sum(dnorm(prior_df$day_diff / h_date) * prior_df$air_temperature) + sum(dnorm(prior_df$delta_t / h_time) * prior_df$air_temperature) 
+
+b <-  sum(dnorm(prior_df$distance / h_distance)) + sum(dnorm(prior_df$day_diff / h_date)) + sum(dnorm(prior_df$delta_t / h_time))
+
+prediction <- a/b
+
+
+h_distance <- sd(prior_df$distance) * 0.5
+h_date <- sd(prior_df$day_diff) * 0.5
+h_time <- sd(prior_df$delta_t) * 0.5
+
+c <- dnorm(prior_df$distance / h_distance) * dnorm(prior_df$day_diff / h_date) * dnorm(prior_df$delta_t / h_time) 
+
+
+prediction_mult <- sum(c * prior_df$air_temperature) / sum(c)
+
+temp[i] <- prediction
+temp_mult[i] <- prediction_mult
+
+# loop end
+# -------------------
+}
+
+plot(temp, type="o")
+plot(temp_mult, type="o")
+
+curve(dnorm(x/h_distance), from = 0, to = 1000000)
+
+```
+
+
+The widths are picked like this, smaller h means we put less impact on points further away. It is scaled by standard deviation, otherwise everything gets pushed to 0 for distance for example. 
+
+h_distance <- sd(prior_df$distance) * 0.1
+
+h_date <- sd(prior_df$day_diff) * 0.1
+
+h_time <- sd(prior_df$delta_t) * 0.1
+ 
+h had to be increased for the multiplicative kernel as it caused division by 0 issues.
+
+The weight from the kernel decays with distance. 
+
+It is worth noting that these predictions are very poor, I tried a data in the summer and got values below 10 degrees. The choice of kernel doesn't handle seasonality but does handle trend effects.
+
+The difference between the multiplicative and the additive kernel is that for the multiplicative kernel the deviation of one variable does not impact the overall kernel that much as for the additive kernel.
+
 ## Assignment 3. SUPPORT VECTOR MACHINES
+
 ## Assignment 4. NEURAL NETWORKS
 
 
