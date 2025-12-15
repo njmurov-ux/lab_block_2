@@ -20,19 +20,23 @@ Assignment 3 was mainly contributed by Shahin.
 Assignment 4 was mainly contributed by Sergey. 
 Theory questions: Q1: Aron, Q2: Shahin, Q3: Sergey.
 
-## Assignment 1. THEORY
+## ASSIGNMENT 1. THEORY
 
 **Q1: What is the kernel trick?** Page 194: If x is used in the model only as dotproducts, we can use the kernel for phi(x)phi(x)^T. The kernel could be easier to calculate, the polynomial basis has closed form so we do not need to project into higher-dimensional space.
 
-**Q2: In the literature, it is common to see a formulation of SVMs that makes use of a hyperparameter
-C. What is the purpose of this hyperparameter?**
+**Q2: In the literature, it is common to see a formulation of SVMs that makes use of a hyperparameter C. What is the purpose of this hyperparameter?**
+(page 211) In SVMs, the hyperparameter C controls the strength of regularisation, i.e. the trade-off between maximising the margin and penalising classification errors. A large C puts a high penalty on misclassification, forcing the model to fit the training data more closely (smaller margin, risk of overfitting). A small C allows more violations of the margin, leading to a wider margin and better generalisation.
+
+In the book, C is introduced as an alternative parameterisation of the regularisation parameter.
+
+$C = \frac{1}{2*\lambda}$ or $C = \frac{1}{2*n\lambda}$
 
 **Q3: In neural networks, what do we mean by mini-batch and epoch?** Page 125: A *mini-batch* is a small subset of the full dataset, typically containing $n_b = 10$, $n_b = 100$, or $n_b = 1{,}000$ observations.
 
 A single complete pass through the entire training dataset is referred to as an *epoch*. Each epoch therefore consists of $n / n_b$ iterations.
 
 
-## Assignment 2. KERNEL METHODS
+## ASSIGNMENT 2. KERNEL METHODS
 
 ```{r 2_1}
 #######################
@@ -181,10 +185,169 @@ It is worth noting that these predictions are very poor, I tried a data in the s
 
 The difference between the multiplicative and the additive kernel is that for the multiplicative kernel the deviation of one variable does not impact the overall kernel that much as for the additive kernel.
 
-## Assignment 3. SUPPORT VECTOR MACHINES
+## ASSIGNMENT 3. SUPPORT VECTOR MACHINES
 
-## Assignment 4. NEURAL NETWORKS
+```{r setup2, include=FALSE,cache=TRUE}
+#######################
+#
+# ASSIGNMENT 3 CODE
+#
+#######################
+library(kernlab)
+set.seed(1234567890)
+```
 
+***3.1. Which filter do we return to the user ? filter0, filter1, filter2 or filter3? Why?***
+
+
+```{r 2.0, include=FALSE,cache=TRUE}
+###########################  Load Data and split data sets #####################
+data(spam)
+foo <- sample(nrow(spam))
+spam <- spam[foo,]
+spam[,-58]<-scale(spam[,-58])
+tr <- spam[1:3000, ]
+va <- spam[3001:3800, ]
+trva <- spam[1:3800, ]
+te <- spam[3801:4601, ] 
+
+```
+The error rate rates of 4 filters are as follows.
+
+```{r 2.1.1,echo=FALSE,cache=TRUE}
+####################  Get validation error and corresponding C #####################
+by <- 0.3
+err_va <- NULL
+for(i in seq(by,5,by)){
+  filter <- ksvm(type~.,data=tr,kernel="rbfdot",kpar=list(sigma=0.05),C=i,scaled=FALSE)
+  mailtype <- predict(filter,va[,-58])
+  t <- table(mailtype,va[,58])
+  err_va <-c(err_va,(t[1,2]+t[2,1])/sum(t))
+}
+
+c1 <- which.min(err_va)
+
+```
+
+```{r 2.1.3,echo=FALSE,cache=TRUE}
+########################### filter0,filter1,filter2,filter3 #####################
+filter0 <- ksvm(type~.,data=tr,kernel="rbfdot",
+               kpar=list(sigma=0.05),C=which.min(err_va)*by,scaled=FALSE)
+mailtype <- predict(filter0,va[,-58])
+t <- table(mailtype,va[,58])
+err0 <- (t[1,2]+t[2,1])/sum(t)
+
+filter1 <- ksvm(type~.,data=tr,kernel="rbfdot",
+                kpar=list(sigma=0.05),C=which.min(err_va)*by,scaled=FALSE)
+mailtype <- predict(filter1,te[,-58])
+t <- table(mailtype,te[,58])
+err1 <- (t[1,2]+t[2,1])/sum(t)
+
+filter2 <- ksvm(type~.,data=trva,kernel="rbfdot",
+                kpar=list(sigma=0.05),C=which.min(err_va)*by,scaled=FALSE)
+mailtype <- predict(filter2,te[,-58])
+t <- table(mailtype,te[,58])
+err2 <- (t[1,2]+t[2,1])/sum(t)
+
+
+filter3 <- ksvm(type~.,data=spam,kernel="rbfdot",
+                kpar=list(sigma=0.05),C=which.min(err_va)*by,scaled=FALSE)
+mailtype <- predict(filter3,te[,-58])
+t <- table(mailtype,te[,58])
+err3 <- (t[1,2]+t[2,1])/sum(t)
+
+cat("error rate of filter0 is", (err0)*100,"%\n")
+cat("error rate of filter1 is", (err1)*100,"%\n")
+cat("error rate of filter2 is", (err2)*100,"%\n")
+cat("error rate of filter3 is", (err3)*100,"%\n")
+```
+***What each filter does***
+- filter0
+  - Trained on tr and Evaluated on va
+  - Used only for model selection
+
+- filter1
+  - Trained on tr and Tested on te
+  - Wastes validation data for training
+
+- filter2 
+  - Trained on tr + va and Tested on te
+  - Does not Waste validation data for training
+
+- filter3 
+  - Trained on all data including test
+  - Causes data leakage
+  - Gives over-optimistic results
+
+Therefore, We return ***filter2*** because after choosing hyperparameter, C using the validation data, it retrains the model using all available non-test data.
+
+
+***3.2 What is the estimate of the generalization error of the filter returned to the user? err0, err1, err2 or err3? Why?***
+
+Generalization error estimates how well do we think that deployed model will perform on new, unseen data.The estimate of the generalization error is ***err2***. Because 
+
+  - err2 measures performance on test data
+  - Test data was never used during training
+  - Therefore, it gives an unbiased estimate of future performance
+
+***3.3 Implementation of SVM predictions.***
+
+In this assignment, the Support Vector Machine (SVM) uses the radial basis function (RBF) kernel, defined as
+
+\[
+K(x, x_i) = \exp\left(-\sigma \| x - x_i \|^2 \right)
+\]
+where:  
+- \( x \) is the \(i\)-th point in the spam dataset (new point)  
+- \( x_i \) is the \(j\)-th support vector  
+- \( \sigma \) is 0.05 (given)
+
+This kernel measures how similar the new point is to each support vector: the closer they are, the larger the kernel value.
+
+The SVM decision function is computed as a linear combination of these kernel values:
+\[
+f(x) = \sum_{i=1}^{n} \alpha_i \, K(x, x_i) + b
+\]
+where:  
+- \( \alpha_i \) are the linear coefficients for support vectors  
+- \( b \) is the intercept of the linear combination
+
+The decision function takes the similarity scores from the kernel (between the new point and each support vector), multiplies each by its weight \( \alpha_i \), adds them all up, and then adds the intercept b. If the total is positive, the point is classified as spam; if negative, it’s non-spam. 
+
+```{r 2.3, echo=FALSE, cache=TRUE}
+###########################  Manual Computations #####################
+sv <- alphaindex(filter3)[[1]]   # support vector indexes
+co <- coef(filter3)[[1]]         # alpha coefficients
+inte <- -b(filter3)              # intercept
+sigma <- 0.05                    # RBF kernel width
+
+manual_decision <- numeric(10)
+
+for(i in 1:10){
+  sum_k <- 0
+  for(j in 1:length(sv)){
+    diff <- spam[sv[j], -58] - spam[i, -58]
+    k_val <- exp(-sigma * sum(diff^2))
+    sum_k <- sum_k + co[j] * k_val
+  }
+  manual_decision[i] <- sum_k + inte
+}
+
+# --- SVM predict() results ---
+svm_decision <- predict(filter3, spam[1:10, -58], type = "decision")
+
+# --- Simple comparison table ---
+decision_table <- data.frame(
+  ManualDecision = round(manual_decision, 6),
+  SVMDecision = round(svm_decision, 6)
+)
+
+decision_table
+```
+
+The manually computed decision values match exactly with the output of the ***predict*** function when using ***type = "decision"***, confirming the correctness of the calculations.
+
+## ASSIGNMENT 4. NEURAL NETWORKS
 
 ```{r t4_setup_and_functions}
 #######################
@@ -360,7 +523,7 @@ matplot(x_big, h_hidden, type = "l", lty = 1,
 ```
 Plotting the outputs of the hidden layer demonstrates that, as the input value increases, the neurons of the hidden layer become "saturated" i.e. more and more of them are stuck at the value of either 0 or 1. When it finally happens for all neurons - on the graph above at a value of approximately 30 - the neural network will produce the same output value regardless of the input value.  
 
-## Task 5
+### Task 5
 
 ```{r t4_5}
 set.seed(1234567890)
