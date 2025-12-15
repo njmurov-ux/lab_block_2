@@ -1,0 +1,252 @@
+---
+title: "Lab 3"
+author: "Aron, Sergey, Shahin"
+date: "2025-12-15"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,
+  warning = FALSE,
+  message = FALSE 
+)
+
+```
+## Statement of Contribution
+
+Assignment 2 was mainly contributed by Aron. 
+Assignment 3 was mainly contributed by Shahin.
+Assignment 4 was mainly contributed by Sergey. 
+Theory questions: Q1: Aron, Q2: Shahin, Q3: Sergey.
+
+## Assignment 1. THEORY
+
+**Q1: What is the kernel trick?**
+
+**Q2: In the literature, it is common to see a formulation of SVMs that makes use of a hyperparameter
+C. What is the purpose of this hyperparameter?**
+
+**Q3: In neural networks, what do we mean by mini-batch and epoch?** p. 125: A *mini-batch* is a small subset of the full dataset, typically containing $n_b = 10$, $n_b = 100$, or $n_b = 1{,}000$ observations.
+
+A single complete pass through the entire training dataset is referred to as an *epoch*. Each epoch therefore consists of $n / n_b$ iterations.
+
+
+## Assignment 2. KERNEL METHODS
+## Assignment 3. SUPPORT VECTOR MACHINES
+## Assignment 4. NEURAL NETWORKS
+
+
+```{r t4_setup_and_functions}
+#######################
+#
+# ASSIGNMENT 4 CODE
+#
+#######################
+# Set all variables to null to avoid possible variable name clashes between unrelated parts of the lab
+rm(list = ls())
+
+library(neuralnet)
+library(sigmoid)
+
+get_data <- function(max_value, train_set_count, total_count=500) {
+  set.seed(1234567890)
+  Var   <- runif(total_count, 0, max_value)
+  mydata <- data.frame(Var, Sin = sin(Var))
+  tr <- mydata[1:train_set_count, ] 
+  if (total_count > train_set_count) {
+    te <- mydata[(train_set_count+1):total_count, ]     
+  }
+
+  
+  list(tr = tr, te = te)
+}
+
+train_network <- function(tr,
+                          act_fct   = "logistic",
+                          form      = Sin ~ Var,
+                          threshold = NULL) {
+  set.seed(1234567890)
+  winit <- runif(21, min = -1, max = 1)
+
+  args <- list(
+    formula       = form,
+    data          = tr,
+    hidden        = 10,
+    startweights  = winit,
+    act.fct       = act_fct,
+    linear.output = TRUE
+  )
+
+  if (!is.null(threshold)) {
+    args$threshold <- threshold
+  }
+
+  nn <- do.call(neuralnet, args)
+  nn
+}
+```
+
+### Task 1
+
+```{r t4_1}
+mydata <- get_data(max_value=10,train_set_count=25)
+tr <- mydata$tr
+te <- mydata$te
+nn <- train_network(tr)
+
+op <- par(mar = c(5, 4, 4, 8), xpd = TRUE)
+
+plot(tr, cex = 3, main = "NN approximation of sin(x) on [0, 10]") 
+points(te, col = "blue", cex = 1)                  
+points(te[, 1], predict(nn, te), col = "red", cex = 1)
+
+legend("topright",
+       inset = c(-0.3, 0),
+       legend = c("Train sin(x)", "Test sin(x)", "NN prediction"),
+       col    = c("black","blue", "red"),
+       pch    = c(1, 1),
+       bty    = "n")
+```
+
+From the plot above we can see that the neutral network is able to approximate the sine function 
+quite well in the input range of 0 to 10 even with the limited amount of training data provided (25 data points).  
+
+### Task 2
+
+```{r t4_2}
+h1 <- function(x) x                         # identity
+# h2 <- function(x) pmax(0, x)              # ReLU 
+# as explained here: 
+# https://stackoverflow.com/questions/34532878/
+# package-neuralnet-in-r-rectified-linear-unit-relu-activation-function
+# it won't work as the pmax function is not differentiable, the suggestion is to use
+# the relu function from the sigmoid package
+h2 <- relu
+h3 <- function(x) log(1 + exp(x))         # softplus
+
+
+acts <- list(
+  linear   = h1,
+  ReLU     = h2,
+  softplus = h3
+)
+
+
+for (name in names(acts)) {
+  h <- acts[[name]]
+  
+  nn_temp    <- train_network(tr, act_fct = h)
+  predictions <- as.vector(predict(nn_temp, te["Var"]))
+  y_all       <- c(te$Sin, predictions)
+  
+  op <- par(mar = c(5, 4, 4, 8), xpd = TRUE)
+  
+  plot(te$Var, te$Sin,
+       col = "blue", cex = 1,
+       xlab = "x", ylab = "sin(x)",
+       main = paste("NN approximation of sin(x) on [0, 10]\nActivation:", name),
+       ylim = range(y_all))
+  
+  points(te$Var, predictions, col = "red", cex = 1)
+  
+  legend("topright",
+         inset = c(-0.3, 0),
+         legend = c("True sin(x)", "NN prediction"),
+         col    = c("blue", "red"),
+         pch    = c(1, 1),
+         bty    = "n")
+}
+```
+From the plots above we can see that the neural network is unable to learn the sine function at all when using the identity function and provides constant output. For the ReLU function, the function is approximated only within a very limited range and as a straight line rather than a curve. The softplus function achieves a potentially better approximation that the default logistic function to which it is closely related. 
+
+
+### Task 3
+
+```{r t4_3}
+set.seed(1234567890)
+Var_new  <- runif(500, 0, 50)
+newdata  <- data.frame(Var = Var_new, Sin = sin(Var_new))
+
+pred_new <- predict(nn, newdata)   
+
+y_all <- c(newdata$Sin, pred_new)
+
+op <- par(mar = c(5, 4, 4, 8), xpd = TRUE)
+
+plot(newdata$Var, newdata$Sin,
+     xlab = "x", ylab = "sin(x)",
+     main = "NN approximation of sin(x) on [0, 50]",
+     ylim = range(y_all))
+points(newdata$Var, pred_new,
+       col = "red", pch = 16, cex = 0.7)
+
+legend("topright",
+       inset = c(-0.3, 0),
+       legend = c("True sin(x)", "NN prediction"),
+       col    = c("black", "red"),
+       pch    = c(1, 16),
+       bty    = "n")
+```
+
+From the plot above, we can see that in the range of input values of 0 to 50, the approximation quickly breaks down when the input values exceed 10 and eventually the outputs collapse to a constant.
+
+### Task 4
+
+```{r t4_4}
+x_big  <- seq(1, 50, length.out = 200)
+dat_big <- data.frame(Var = x_big)
+# collapsing to a value around -2.785
+W1 <- nn$weights[[1]][[1]]
+W2 <- nn$weights[[1]][[2]]
+sigm <- function(z) plogis(z)  # logistic activation
+
+# Hidden pre-activations and activations for x
+z_hidden <- outer(x_big, W1[2, ], `*`) + matrix(W1[1, ], nrow = length(x_big), ncol = 10, byrow = TRUE)
+h_hidden <- sigm(z_hidden)
+
+matplot(x_big, h_hidden, type = "l", lty = 1,
+        xlab = "x", ylab = "hidden activations",
+        main = "Hidden units for x in [1, 50]")
+```
+Plotting the outputs of the hidden layer demonstrates that, as the input value increases, the neurons of the hidden layer become "saturated" i.e. more and more of them are stuck at the value of either 0 or 1. When it finally happens for all neurons - on the graph above at a value of approximately 30 - the neural network will produce the same output value regardless of the input value.  
+
+## Task 5
+
+```{r t4_5}
+set.seed(1234567890)
+Var   <- runif(500, 0, 10)
+mydata <- data.frame(Var, Sin = sin(Var))
+nn_temp    <- train_network(mydata, form = Var ~ Sin, threshold = 0.1)
+predictions <- as.vector(predict(nn_temp, mydata["Sin"]))
+y_all       <- c(mydata$Var, predictions)
+
+op <- par(mar = c(5, 4, 4, 8), xpd = TRUE)
+
+plot(mydata$Sin, mydata$Var,
+     col = "blue", cex = 1,
+     xlab = "sin(x)", ylab = "x",
+     main = "NN approximation of sin(x) to x function",
+     ylim = range(y_all))
+
+points(mydata$Sin, predictions, col = "red", cex = 1)
+
+legend("topright",
+       inset = c(-0.3, 0),
+       legend = c("True x", "NN prediction"),
+       col    = c("blue", "red"),
+       pch    = c(1, 1),
+       bty    = "n",
+       title  = name)
+```
+We are seeing a poor approximation because the neural network is trying to find a 1-to-1 mapping between the input and the output values but in the case of the $y=\arcsin(x)$ function it does not exist.
+
+
+## Appendix
+
+
+```{r, ref.label=setdiff(knitr::all_labels(), c('setup')), echo=TRUE, eval=FALSE}
+
+
+
+```
