@@ -58,7 +58,10 @@ longitude <- 14.826
 
 # documentation says first one is longitude
 # distance is in meters, i checked externally
-distance_to_station <- sapply(1:nrow(st), function(x) distHaversine(c(st$longitude[x], st$latitude[x]), c(longitude, latitude)))
+distance_to_station <- sapply(1:nrow(st), 
+                              function(x) distHaversine(c(st$longitude[x], 
+                                                          st$latitude[x]), 
+                                                          c(longitude, latitude)))
 
 st$distance <- distance_to_station
 ```
@@ -128,7 +131,9 @@ hour_fun <- function(x, y) {
 }
 
 
-prior_df$delta_t <- sapply(1:nrow(prior_df), function(x) hour_fun(numeric_hour_of_interest, prior_df$time[x] |> substr(1, 2) |> as.numeric()))
+prior_df$delta_t <- sapply(1:nrow(prior_df), 
+                           function(x) hour_fun(numeric_hour_of_interest,
+                                                prior_df$time[x] |> substr(1, 2) |> as.numeric()))
 
 # small h makes the distance larger
 h_distance <- sd(prior_df$distance) * 0.1
@@ -138,9 +143,13 @@ h_time <- sd(prior_df$delta_t) * 0.1
 # too large h means it converges to the mean
 # mean(prior_df$air_temperature)
 
-a <- sum(dnorm(prior_df$distance / h_distance) * prior_df$air_temperature) + sum(dnorm(prior_df$day_diff / h_date) * prior_df$air_temperature) + sum(dnorm(prior_df$delta_t / h_time) * prior_df$air_temperature) 
+a <- sum(dnorm(prior_df$distance / h_distance) * prior_df$air_temperature) +
+  sum(dnorm(prior_df$day_diff / h_date) * prior_df$air_temperature) +
+  sum(dnorm(prior_df$delta_t / h_time) * prior_df$air_temperature) 
 
-b <-  sum(dnorm(prior_df$distance / h_distance)) + sum(dnorm(prior_df$day_diff / h_date)) + sum(dnorm(prior_df$delta_t / h_time))
+b <-  sum(dnorm(prior_df$distance / h_distance)) +
+  sum(dnorm(prior_df$day_diff / h_date)) +
+  sum(dnorm(prior_df$delta_t / h_time))
 
 prediction <- a/b
 
@@ -149,7 +158,8 @@ h_distance <- sd(prior_df$distance) * 0.5
 h_date <- sd(prior_df$day_diff) * 0.5
 h_time <- sd(prior_df$delta_t) * 0.5
 
-c <- dnorm(prior_df$distance / h_distance) * dnorm(prior_df$day_diff / h_date) * dnorm(prior_df$delta_t / h_time) 
+c <- dnorm(prior_df$distance / h_distance) * dnorm(prior_df$day_diff / h_date) *
+  dnorm(prior_df$delta_t / h_time) 
 
 
 prediction_mult <- sum(c * prior_df$air_temperature) / sum(c)
