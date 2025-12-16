@@ -470,7 +470,7 @@ for (name in names(acts)) {
          bty    = "n")
 }
 ```
-From the plots above we can see that the neural network is unable to learn the sine function at all when using the identity function and provides constant output. For the ReLU function, the function is approximated only within a very limited range and as a straight line rather than a curve. The softplus function achieves a potentially better approximation that the default logistic function to which it is closely related. 
+From the plots above we can see that the neural network is unable to learn the sine function at all when using the identity function and provides constant output. For the ReLU function, the function is approximated only within a very limited range and as a straight line rather than a curve. The softplus function achieves a potentially better approximation that the default logistic function to which it is closely related as the logistic function is the derivative of softplus.
 
 
 ### Task 3
@@ -522,6 +522,10 @@ matplot(x_big, h_hidden, type = "l", lty = 1,
         main = "Hidden units for x in [1, 50]")
 ```
 Plotting the outputs of the hidden layer demonstrates that, as the input value increases, the neurons of the hidden layer become "saturated" i.e. more and more of them are stuck at the value of either 0 or 1. When it finally happens for all neurons - on the graph above at a value of approximately 30 - the neural network will produce the same output value regardless of the input value.  
+
+It is mentioned in the literature[^1] that non-periodic activation functions are not suitable for modeling the behavior of periodic functions such as sine.
+
+[^1]: https://papers.neurips.cc/paper_files/paper/2020/file/1160453108d3e537255e9f7b931f4e90-Paper.pdf
 
 ### Task 5
 
