@@ -2,7 +2,9 @@
 title: "Block 1 Lab 2 report"
 author: 'Group B13: Aron(aroen488), Sergey(servo519), Shahin(mdpa888)'
 date: "2025-11-26"
-output: pdf_document
+output:
+  html_document:
+    df_print: paged
 ---
 
 ```{r setup, include=FALSE}
@@ -79,8 +81,14 @@ We see that the MSE is very low in the training set, model is extremely overfit 
 
 For lasso regression we force the less important parameters to 0, this is because we add the L1 norm to the cost function.
 
-$$Cost =  \sum^n_{i=1}(\vec{y_i}-x_i^T\vec{\beta})+\lambda\sum^p_{j=1}|\beta_j| $$ 
-Where $x_i^T$ is the covariates for observation i. $\lambda$ is a hyperparameter controlling the strength of the lasso regularization.
+$$Cost =  \sum^n_{i=1}(y_i-x_i^T\vec{\beta})^2+\lambda\sum^p_{j=0}|\beta_j| $$ 
+Where $x_i^T$ is the covariates for observation i. $\lambda$ is a hyperparameter controlling the strength of the lasso regularization. $\vec{\beta}$ is a 1xp vector with the regression coefficients $$\vec{\beta} = \begin{bmatrix}
+\beta_0 \\
+\beta_1 \\
+\vdots \\
+\beta_p
+\end{bmatrix}
+$$ . 
 
 # Q3
 
@@ -127,7 +135,7 @@ It doesn't make sense to select features with ridge, they do not drop to 0, on t
 # Q5
 
 ```{r, echo=FALSE}
-
+set.seed(12345)
 model_cross_val <- cv.glmnet(X_train, train$Fat, alpha = 1)
 plot(model_cross_val)
 
