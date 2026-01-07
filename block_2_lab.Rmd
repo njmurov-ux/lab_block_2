@@ -2,7 +2,9 @@
 title: "lab_block_2"
 author: "Aron, Sergey, Shahin"
 date: "2025-11-14"
-output: pdf_document
+output:
+  html_document:
+    df_print: paged
 ---
 
 ```{r setup, include=FALSE}
@@ -51,9 +53,22 @@ random_forest_sim <- function(NS = 25, condition = function(x1, x2){
   telabels<-as.factor(y)
   
   
-  
+  #plotting the condition
   # ------------------------
   
+    x1 <- seq(0, 1, length.out = 300)
+    x2 <- seq(0, 1, length.out = 300)
+
+    grid <- expand.grid(x1 = x1, x2 = x2)
+
+    grid$y <- condition(grid$x1, grid$x2) + 1
+
+    # white is false, black is true
+    colors <- c("white", "black")
+    
+    plot(grid$x1, grid$x2, col = colors[grid$y], pch = 15, cex = 0.5)
+  
+  # ------------------------
   
   ntree <- c(1, 10, 100)
   n <- 1000
@@ -61,6 +76,10 @@ random_forest_sim <- function(NS = 25, condition = function(x1, x2){
   miss_df <- matrix(0, 3, length(ntree)) %>%  as.data.frame()
   rownames(miss_df) <- c("mu", "var", "sd")
   colnames(miss_df) <- ntree
+  
+  one_experiment_df <- matrix(0, 1, length(ntree)) %>%  as.data.frame()
+  rownames(one_experiment_df) <- c("missclassification rate")
+  colnames(one_experiment_df) <- ntree
   
   
   for (nt in ntree) {
@@ -81,11 +100,16 @@ random_forest_sim <- function(NS = 25, condition = function(x1, x2){
       
     }
     
+    # first experiment:
+    one_experiment_df[1, which(nt == ntree)] <- missrate[1]
+    
     miss_df[1, which(nt == ntree)] <- mean(missrate)
     miss_df[2, which(nt == ntree)] <- var(missrate)
     miss_df[3, which(nt == ntree)] <- sd(missrate)
   }
   
+
+  print(round(one_experiment_df, 4))
   return(miss_df)
 }
 
@@ -130,10 +154,13 @@ rf3 %>% round(4)
 ```
 
 
+
 **What happens with the mean error rate when the number of trees in the random
 forest grows? Why?**
 
-For numerical Y, the bias drops when the number of bagged learners combined are increased. For this case we use majority voting. Say X shows wether the prediction from a tree is accurate, $X = {0, 1}$, X is ber(p) and $X_i$ is i.i.d for different trees. The sum of $X_i$ is bin(n, p). $$P(\hat{y} = Y = 1) = P(bin(n, p) > n/2) \approx P(N(np, np(1-p) > n/2) = \phi(\frac{\frac{n}{2} -np}{\sqrt{np(1-p)}})$$ Which scales as $\sqrt{n}\cdot c$. The limits of phi is 0 and 1 as it is a cdf. Meaning the model will become very confident in predictions (0 if p<0.5, 1 otherwise). So for a p = 0.51, the model would always predict 1 if n is large enough, for 1 tree the variance of $\hat{y}$ would be larger. This is why the error rate drops, out model becomes better at confidently predicting y for p close to 0.5. But the bias doesn't stay constant like for numerical Y, say Y = 1, for one tree $Bias = p - Y$, if p >0.5, our tree is better than a random guess, then the bias drops, if our tree is worse than a random guess, the bias actually increases! 
+In our lab we do not have numerical Y, we have categorical Y. For numerical Y, the variance drops when the number of bagged learners combined are increased. For categorical Y we use majority voting. Define X that show whether the prediction from a single tree is correct, $X \in \{0, 1\}$, X is ber(p) and $X_i$ is i.i.d for different trees. They are not exactly independent as tree splits depend on the data, but we can say they are i.i.d approximately for ease of reasoning. The sum of $X_i$ is bin(n, p). $$P(Successful\ majority\ vote) = P(bin(n, p) > n/2) \approx P(N(np, np(1-p) > n/2) = \phi(\frac{np - \frac{n}{2}}{\sqrt{np(1-p)}})$$ Which scales as $\sqrt{n}\cdot c$. The limits are 0 and 1 as phi is a cdf. Meaning the model will become very confident in predictions (0 if p<0.5, 1 otherwise). So for a p = 0.51, the model would always predict 1 if n is large enough, for 1 tree the variance of $\hat{y}$ would be larger. The variance of the prediction drops in bagging. This is why the error rate drops, our model becomes better at confidently predicting y for p close to 0.5. 
+$$$$
+Unlike for numerical Y, the variance in predictions dropping could be bad in the case of classification. Consider a predictor that predicts 1 49\% of the time when Y = 1, this is worse than a random guess. If we use 1 predictor we will still be correct 49\% of the time. If we reduce the variance in this prediction we predict 0 all the time. 
 
 
 
@@ -157,7 +184,7 @@ rf3 %>% round(4)
 
 ```
 
-The reason for this is that lines parallell to the variable axis are drawn when a deciscion tree is trained, but in the first dataset the decision boundry is y=x, trees can still approximate this, but it requires more trees or depth, it will look like a stepwise function.
+The reason for this is that lines parallell to the variable axis are drawn when a deciscion tree is trained, but in the first dataset the decision boundry is $x_1=x_2$, trees can still approximate this, but it requires more trees or depth, it will look like a stepwise function.
 
 
 # Assignment 2. MIXTURE MODELS
@@ -640,7 +667,12 @@ So each of the 10 models ends up nearly identical.When all models are similar, b
 
 **Q1 In an ensemble model, is it true that the larger the number B of ensemble members, the more flexible the ensemble model?**
 Page 169:
+For bagging:
 No, the bias stays constant, atleast for numerical Y. The model does not fit the data better, bagging is a variance reduction techinque aimed to reduce the variance stemming from the sampling variance, by averaging over multiple simulated bootstrap samples. Hence the flexibility isn't increased. 
+
+For boosting:
+Page 182
+Each itteration in boosting tries to correct the errors of the previous model, the model becomes more flexible as B increases.  
 
 **Q2 In AdaBoost, what is the loss function used to train the boosted classifier at each iteration?** 
 
