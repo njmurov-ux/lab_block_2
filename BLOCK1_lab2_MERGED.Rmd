@@ -2,9 +2,7 @@
 title: "Block 1 Lab 2 report"
 author: 'Group B13: Aron(aroen488), Sergey(servo519), Shahin(mdpa888)'
 date: "2025-11-26"
-output:
-  html_document:
-    df_print: paged
+output: pdf_document
 ---
 
 ```{r setup, include=FALSE}
@@ -174,20 +172,20 @@ The model seems much better than the original non-regularized model. The predict
 
 ### Task 1
 
-```{r t2_1}
+```{r t2_1, echo=FALSE}
 #######################
 #
 # TASK 2 CODE
 #
 #######################
 library(data.table)
-library(rpart)
+library(tree)
 library(knitr)
 
 data <- fread('data/bank-full.csv', stringsAsFactors = FALSE)
 data$duration <- NULL
 categorical_cols <- c('job', 'marital', 'education', 'default', 'housing', 'loan',
-                      'contact', 'month', 'day', 'poutcome', 'y')
+                      'contact', 'month', 'poutcome', 'y')
 
 for (col in categorical_cols) {
   data[[col]] <- factor(data[[col]], levels = unique(data[[col]]))
@@ -209,186 +207,142 @@ After splitting the data into training/test/validation at the 40/30/30 ratio, we
 
 ### Task 2
 
-```{r t2_2}
+```{r t2_2, echo=FALSE}
 
-# a. Decision tree with default settings
-tree_default <- rpart(y ~ ., data = train, method = "class")
+# a) Decision tree with default settings
+tree_default <- tree(y ~ ., data = train) 
 
-# b. Decision tree with smallest allowed node size (minbucket) = 7000
-tree_minbucket <- rpart(y ~ ., data = train, method = "class", control = rpart.control(minbucket = 7000))
+# b) Smallest allowed node size = 7000
+# (minsize = smallest node size eligible to split)
+tree_minsize_7000 <- tree(
+  y ~ ., data = train,
+  control = tree.control(nobs = nrow(train), minsize = 7000)
+)
 
-# c. Decision tree with minimum deviance (mindev) = 0.0005
-# Note: rpart does not have a mindev control parameter; deviance threshold is controlled differently by 'cp'
-# We first need to obtain the deviance at the root node and then calculate the ratio between our
-# absolute minimum deviance threshold of 0.0005 and that to use the output as the input to the cp
-# parameter in rpart
+# c) Minimum deviance = 0.0005
+# mindev is a *fraction of root deviance* required to split a node
+tree_mindev_0.0005 <- tree(
+  y ~ ., data = train,
+  control = tree.control(nobs = nrow(train), mindev = 0.0005)
+)
 
-tmp <- rpart(y ~ ., data = train, method = "class",
-             control = rpart.control(cp = 0.0, xval = 0))
-D_root <- tmp$frame$dev[1]  # deviance at the root node
-mindev_target <- 0.0005  # absolute deviance reduction we want
-cp_val <- mindev_target / D_root
-
-tree_cp <- rpart(y ~ ., data = train, method = "class", control = rpart.control(cp = cp_val))
-
-misclass_rate <- function(model, data) {
+misclass_rate_tree <- function(model, data) {
   pred <- predict(model, newdata = data, type = "class")
   mean(pred != data$y)
 }
 
-# Calculate misclassification rates
 results <- data.frame(
-  Model = c("Default", "Minbucket 7000", "CP 0.0005"),
-  Train_Misclass = c(misclass_rate(tree_default, train),
-                     misclass_rate(tree_minbucket, train),
-                     misclass_rate(tree_cp, train)),
-  Valid_Misclass = c(misclass_rate(tree_default, valid),
-                     misclass_rate(tree_minbucket, valid),
-                     misclass_rate(tree_cp, valid))
+  Model = c("Default", "minsize = 7000", "mindev = 0.0005"),
+  Internal_splits = c(sum(tree_default$frame$var != "<leaf>"),
+                       sum(tree_minsize_7000$frame$var != "<leaf>"),
+                       sum(tree_mindev_0.0005$frame$var != "<leaf>")),
+  Train_Misclass = c(misclass_rate_tree(tree_default, train),
+                     misclass_rate_tree(tree_minsize_7000, train),
+                     misclass_rate_tree(tree_mindev_0.0005, train)),
+  Valid_Misclass = c(misclass_rate_tree(tree_default, valid),
+                     misclass_rate_tree(tree_minsize_7000, valid),
+                     misclass_rate_tree(tree_mindev_0.0005, valid))
 )
-
-print(results)
-
-num_splits <- c(
-  Default = length(tree_default$frame$var[tree_default$frame$var != "<leaf>"]),
-  Minbucket7000 = length(tree_minbucket$frame$var[tree_minbucket$frame$var != "<leaf>"]),
-  CP_0.0005 = length(tree_cp$frame$var[tree_cp$frame$var != "<leaf>"])
+kable(
+  results,
+  digits = 3,
+  caption = "Train and validation misclassification rates for tree models"
 )
+# Number of internal (split) nodes = total nodes - leaves
 
-print(num_splits)
+# print(num_splits)
 
-library(rpart.plot)
-
-# Plot 3 original trees side-by-side for comparison
-par(mfrow = c(1, 3))
-
-rpart.plot(tree_default, main = "Default Settings")
-rpart.plot(tree_minbucket, main = "Minbucket = 7000")
-rpart.plot(tree_cp, main = "cp = 0.0005")
-
-par(mfrow = c(1, 1))
+# par(mfrow = c(1, 3))
+# 
+# plot(tree_default); text(tree_default); title("Default Settings")
+# plot(tree_minsize_7000); text(tree_minsize_7000); title("minsize = 7000")
+# plot(tree_mindev_0.0005); text(tree_mindev_0.0005); title("mindev = 0.0005")
+# 
+# par(mfrow = c(1, 1))
 ```
 
-- Default: uses reasonable default parameters, only 1 split, relatively low bias and low variance
-- Min bucket 7000: no split at all as child nodes are all smaller than 7000. This is just assigning all instances to the dominant class
+- Default: uses reasonable default parameters, relatively low bias and low variance
+- Min size 7000: same training and misclassification rates as the default tree, although one less split than the default tree - but it does not affect the misclassification rates as all the nodes on one side of the tree after the initial split on poutcome predict "no"
 - Min dev = 0.0005: Very many leaves, low bias but the highest variance, clear signs of overfitting. We need to prune this tree.
 
 
 ### Task 3
 
-```{r t2_3}
-n_leaves <- function(fit) sum(fit$frame$var == "<leaf>")
+```{r t2_3, echo=FALSE}
 
-tree_deviance <- function(fit, data) {
-  p_hat <- predict(fit, newdata = data, type = "prob")
-  y <- data$y
-  idx <- cbind(seq_len(nrow(p_hat)), match(y, colnames(p_hat)))
-  -2 * mean(log(p_hat[idx]))
+seq_train <- prune.tree(tree_mindev_0.0005, newdata = train, method = "deviance")  
+seq_valid <- prune.tree(tree_mindev_0.0005, newdata = valid, method = "deviance")
+
+train_tot <- if (!is.null(seq_train$dev)) seq_train$dev else seq_train$deviance
+valid_tot <- if (!is.null(seq_valid$dev)) seq_valid$dev else seq_valid$deviance
+
+train_df <- data.frame(leaves = seq_train$size,
+                       train_mean_dev = train_tot / nrow(train))
+valid_df <- data.frame(leaves = seq_valid$size,
+                       valid_mean_dev = valid_tot / nrow(valid))
+
+dev_df <- merge(train_df, valid_df, by = "leaves", all = TRUE)
+dev_df <- dev_df[dev_df$leaves <= 50, ]
+dev_df <- dev_df[order(dev_df$leaves), ]
+
+# Plot
+plot(dev_df$leaves, dev_df$train_mean_dev, type = "l", lwd = 2, col = "blue",
+     xlab = "Number of leaves", ylab = "Mean deviance",
+     ylim = range(c(dev_df$train_mean_dev, dev_df$valid_mean_dev), na.rm = TRUE))
+
+lines(dev_df$leaves, dev_df$valid_mean_dev, lwd = 2, col = "red")
+
+legend("topright", legend = c("Train", "Validation"),
+       col = c("blue", "red"), lwd = 2, lty = c(1, 1), bty = "n")
+
+best_L <- dev_df$leaves[which.min(dev_df$valid_mean_dev)]
+cat("Optimal number of leaves: ", best_L)
+best_tree <- prune.tree(tree_mindev_0.0005, best = best_L)
+```
+
+As the number of leaves increases, the training deviance decreases monotonically, while the validation deviance initially decreases and then increases again. For very small trees (few leaves), both training and validation deviances are high, indicating underfitting and high bias. As we allow more leaves, the model becomes more flexible, bias decreases, and validation deviance improves, reaching its minimum at `r best_L` leaves. Beyond `r best_L` leaves, further increases in tree size continue to reduce training deviance but lead to higher validation deviance, which indicates that additional complexity mainly increases variance and causes overfitting. Thus a tree with `r best_L` leaves provides the best bias–variance tradeoff.
+
+
+```{r t2_3_1, echo=FALSE}
+frame <- best_tree$frame
+
+# node ids are stored as rownames (character); convert once
+node_id <- rownames(frame)
+dev_by_node <- setNames(frame$dev, node_id)
+var_by_node <- setNames(as.character(frame$var), node_id)
+internal_nodes <- node_id[var_by_node != "<leaf>"]
+split_vars <- unique(var_by_node[var_by_node != "<leaf>"])
+imp <- setNames(rep(0, length(split_vars)), split_vars)
+
+for (nid in internal_nodes) {
+  node_num <- as.integer(nid)
+
+  left_id  <- as.character(2 * node_num)
+  right_id <- as.character(2 * node_num + 1)
+
+  # If pruned, a child might not exist; skip defensively
+  if (!(left_id %in% node_id) || !(right_id %in% node_id)) next
+
+  delta <- dev_by_node[nid] - dev_by_node[left_id] - dev_by_node[right_id]  # deviance reduction
+  v <- var_by_node[nid]
+  imp[v] <- imp[v] + delta
 }
 
-# This extracts the vector of complexity‑parameter values from the complexity‑parameter 
-# table (cptable) stored in the rpart fit object.
-# We're iterating through pruned trees stored in this table which should allow us to
-# determine the optimal number of leaves
-cp_seq <- tree_cp$cptable[, "CP"]
-
-dev_list <- lapply(seq_along(cp_seq), function(i) {
-  fit_i <- prune(tree_cp, cp = cp_seq[i])
-  data.frame(
-    cp        = cp_seq[i],
-    leaves    = n_leaves(fit_i),
-    train_dev = tree_deviance(fit_i, train),
-    valid_dev = tree_deviance(fit_i, valid)
-  )
-})
-
-dev_df <- do.call(rbind, dev_list)
-dev_df_50 <- subset(dev_df, leaves <= 50)
-
-library(ggplot2)
-
-ggplot(dev_df_50, aes(x = leaves)) +
-  geom_line(aes(y = train_dev, colour = "Train")) +
-  geom_line(aes(y = valid_dev, colour = "Validation")) +
-  labs(x = "Number of leaves", y = "Deviance", colour = "Data") +
-  theme_minimal()
-
-# Optimal subtree (within 50 leaves) by validation deviance
-opt_row <- dev_df_50[which.min(dev_df_50$valid_dev), ]
-opt_leaves <- opt_row$leaves
-opt_cp     <- opt_row$cp
-
-tree_opt <- prune(tree_cp, cp = opt_cp)
-print(paste("Optimal number of leaves:", opt_leaves))
+sort(imp, decreasing = TRUE)
 ```
 
-For a classification model that predicts class probabilities $\hat{p}_{i,k}$ for each
-observation $i = 1, \dots, n$ and class $k = 1, \dots, K$, the (mean) deviance is
+The above variable importance numbers are based on how much each variable reduces the node loss (impurity / deviance) over all the splits where it is used. From these numbers, it appears that poutcome (outcome of previous marketing campaign) and month (month of contact) play the most important role in decision making within the tree. Contact communication type and customer characteristics play a smaller role.
 
-$$
-D = -\frac{2}{n} \sum_{i=1}^n \sum_{k=1}^K y_{i,k} \log\bigl(\hat{p}_{i,k}\bigr),
-$$
-
-where
-
-- $n$ is the number of observations in the dataset.
-- $K$ is the number of classes.
-- $y_{i,k}$ is an indicator variable:
-  $y_{i,k} = 1$ if observation $i$ belongs to class $k$, and $0$ otherwise.
-- $\hat{p}_{i,k}$ is the predicted probability (from the model) that
-  observation $i$ belongs to class $k$.
-- $D$ is the (average) deviance: lower values of $D$ indicate a better fit.
-
-In the special case of binary classification with response $y_i \in \{0,1\}$ and
-predicted probability $\hat{p}_i = P(y_i = 1)$, this simplifies to
-
-$$
-D = -\frac{2}{n} \sum_{i=1}^n \Bigl[
-  y_i \log(\hat{p}_i) + (1 - y_i)\log(1 - \hat{p}_i)
-\Bigr].
-$$
-
-Here
-
-- $y_i$ is the observed class for observation $i$ (1 for “success”, 0 for “failure”),
-- $\hat{p}_i$ is the predicted probability of class 1 for observation $i$.
-
-As the number of leaves increases, the training deviance decreases monotonically, while the validation deviance initially decreases and then increases, forming a U‑shaped curve. For very small trees (few leaves), both training and validation deviances are high, indicating underfitting and high bias. As we allow more leaves, the model becomes more flexible, bias decreases, and validation deviance improves, reaching its minimum at 16 leaves. Beyond 16 leaves, further increases in tree size continue to reduce training deviance but lead to higher validation deviance, which indicates that additional complexity mainly increases variance and causes overfitting. Thus a tree with 16 leaves provides the best bias–variance tradeoff.
-
-
-```{r t2_3_1}
-# Variable importance
-sort(tree_opt$variable.importance, decreasing = TRUE)
-## To get percentage variables:
-# imp_raw  <- tree_opt$variable.importance
-# imp_pct  <- 100 * imp_raw / sum(imp_raw)
-# sort(imp_pct, decreasing = TRUE)
-```
-
-Variable importance in rpart is based on how much each variable reduces the node loss (impurity / deviance) over all the splits where it is used.
-
-- Most important: poutcome (outcome of previous marketing campaign) and month (month of contact).
-
-- Next tier: day of the month, pdays (days since last contact), and contact type.
-
-- Less important but still used: job, balance, campaign.
-
-- Barely used: age, previous, education, default (almost no contribution).
-
-The tree mainly bases its decisions on past campaign outcome and timing of the contact, with customer/job characteristics playing a smaller role.
-
-```{r t2_3_2}
+```{r t2_3_2, echo=FALSE}
 models <- list(
-  "Default"        = tree_default,
-  "Minbucket 7000" = tree_minbucket,
-  "CP 0.0005"      = tree_cp,
-  "Optimal 16-leaf" = tree_opt
+  "CP 0.0005"      = tree_mindev_0.0005,
+  "Optimal" = best_tree
 )
 
 misclass_df <- do.call(rbind, lapply(models, function(m) {
   c(
-    Train = misclass_rate(m, train),
-    Valid = misclass_rate(m, valid)
+    Train = misclass_rate_tree(m, train),
+    Valid = misclass_rate_tree(m, valid)
   )
 }))
 
@@ -402,28 +356,30 @@ misclass_df <- data.frame(
 kable(
   misclass_df,
   digits = 3,
-  caption = "Train and validation misclassification rates for tree models"
+  caption = "Train and validation misclassification rates tree model before and after pruning"
 )
 ```
-The 16‑leaf tree chosen by minimum validation deviance has essentially the same validation misclassification rate as the default tree that only splits on *poutcome*. However, the 16‑leaf tree achieves a lower validation deviance, indicating that its predicted probabilities are better calibrated and capture more nuanced structure in the data. In terms of the bias–variance tradeoff, it reduces bias (better fit) without noticeably reducing 0–1 error on the validation set.
+The `r best_L`‑leaf tree chosen by minimum validation deviance has essentially the same validation misclassification rate as the original tree before pruning. However, the pruned tree achieves a lower validation deviance, indicating that its predicted probabilities are better calibrated and capture more nuanced structure in the data. In terms of the bias–variance tradeoff, it reduces bias (better fit) without noticeably reducing 0–1 error on the validation set.
 
-```{r t2_3_3}
-# Plot the tree for interpretation
-library(rpart.plot)
-rpart.plot(tree_opt, type = 2, extra = 104)
+```{r t2_3_3, echo=FALSE}
+# Plot the selected/pruned tree from the {tree} package
+par(xpd = NA , mar = c(1.5, 1.5, 3, 1.5))
+plot(best_tree, type = "uniform")                                   
+text(best_tree, pretty = 0, cex=0.7)            
+title(main = sprintf("Pruned tree (leaves = %d)", sum(best_tree$frame$var == "<leaf>")))
 ```
 
 Key findings:
 
 - Previous campaign success is the single most informative variable, essentially splitting the population into a low‑propensity group and a high‑propensity group.
 
-- Timing matters: both within the non‑success and success groups, the specific month and day of contact have substantial influence, suggesting seasonality or within‑month effects in customer responsiveness.
+- Timing matters: both within the non‑success and success groups, the specific month of contact has substantial influence, suggesting seasonality or within‑month effects in customer responsiveness.
 
 - Customer profile variables such as job and balance play a secondary, fine‑tuning role: they help pick out especially promising or unpromising subsegments but do not overturn the primary pattern driven by past outcome and timing.
 
 ### Task 4
 
-```{r t2_4}
+```{r t2_4, echo=FALSE}
 
 format_cm <- function(cm) {
   # positive class is "yes" and negative is "no"
@@ -431,7 +387,7 @@ format_cm <- function(cm) {
   fn <- cm["yes", "no"]
   fp <- cm["no",  "yes"]
   tn <- cm["no",  "no"]
-  
+
   cm_labeled <- matrix(
     c(
       paste0(tp, " (TP)"),
@@ -448,36 +404,44 @@ format_cm <- function(cm) {
   return(cm_labeled)
 }
 
-pred_test <- predict(tree_opt, newdata = test, type = "class")
+pred_test <- predict(best_tree, newdata = test, type = "class")
+
 
 cm <- table(Observed = test$y, Predicted = pred_test)
 cm_labeled <- format_cm(cm)
 kable(
   cm_labeled,
-  caption = "Confusion matrix for tree_opt on test data (TP = true positives, FP = false positives, FN = false negatives, TN = true negatives)"
+  caption = "Confusion matrix for optimal tree on test data (TP = true positives, FP = false positives, FN = false negatives, TN = true negatives)"
 )
 
 calculate_metrics <- function(pred_test, test, cm) {
   accuracy <- mean(pred_test == test$y)
   print(paste("Accuracy:", accuracy))
-  
+
   positive <- "yes"
-  
+
   tp <- cm[positive, positive]
   fp <- sum(cm[, positive]) - tp
   fn <- sum(cm[positive, ]) - tp
-  
+
   precision <- tp / (tp + fp)
   recall    <- tp / (tp + fn)
   f1        <- 2 * precision * recall / (precision + recall)
-  
+
   print(paste("Precision:", precision))
   print(paste("Recall:", recall))
-  print(paste("F1:", f1))  
+  print(paste("F1:", f1))
+  
+  list(
+    accuracy  = accuracy,
+    precision = precision,
+    recall    = recall,
+    f1        = f1
+  )
 }
-calculate_metrics(pred_test, test, cm)
+metrics <- calculate_metrics(pred_test, test, cm)
 ```
-From the numbers above we can see that the accuracy is about 0.89, but the majority class (“no”) already accounts for about 90% of the data, so a trivial classifier that always predicts “no” would get almost the same accuracy. At the same time, precision for “yes” is 0.61 and recall is 0.21, giving F1 around 0.31. That means that the model:
+From the numbers above we can see that the accuracy is about `r metrics$accuracy`, but the majority class (“no”) already accounts for about 90% of the data, so a trivial classifier that always predicts “no” would get almost the same accuracy. At the same time, precision for “yes” is `r metrics$precision` and recall is `r metrics$recall`, giving F1 around `r metrics$f1`. That means that the model:
 
 - Misses most actual “yes” cases (low recall).
 - Among predicted “yes”, a substantial fraction are wrong (precision moderate, not high).
@@ -486,49 +450,40 @@ So in terms of identifying the minority class, the predictive power is modest: t
 
 The F1 appears to be more informative here as the class distribution is highly skewed toward “no”, so accuracy is dominated by correct “no” predictions and hides the poor detection of “yes”. F1 focuses on the minority/positive class by combining precision and recall, so it better reflects the model’s usefulness for finding subscribers.
 
-Therefore despite a high overall accuracy driven by the majority “no” class, the model’s performance on the important “yes” class is relatively weak, and F1 (approx 0.31) is a more appropriate performance summary than accuracy given the strong class imbalance.
+Therefore despite a high overall accuracy driven by the majority “no” class, the model’s performance on the important “yes” class is relatively weak, and F1 is a more appropriate performance summary than accuracy given the strong class imbalance.
 
 ### Task 5
 
-```{r t2_5}
+```{r t2_5, echo=FALSE}
 loss_mat <- matrix(
-  c(0, 1,   # observed = "no":  pred "no", pred "yes"
-    5, 0),  # observed = "yes": pred "no", pred "yes"
+  c(0, 1,
+    5, 0),
   nrow = 2, byrow = TRUE,
   dimnames = list(
     Observed  = c("no", "yes"),
     Predicted = c("no", "yes")
   )
 )
-
-loss_mat  
-
-# Fit cost-sensitive tree on training data
-tree_loss <- rpart(
-  y ~ .,
-  data   = train,
-  method = "class",
-  parms  = list(split="information", loss = loss_mat),
-  # control = ctrl
-)
-
-pred_test_loss <- predict(tree_loss, newdata = test, type = "class")
-cm_loss <- table(Observed = test$y, Predicted = pred_test_loss)
-cm_df <- format_cm(cm_loss)
+pred_test_prob <- predict(best_tree, newdata = test, type = "vector")
+exp_loss <- pred_test_prob %*% loss_mat
+pred_cost <- colnames(exp_loss)[max.col(-exp_loss, ties.method = "first")]
+pred_cost <- factor(pred_cost, levels = colnames(loss_mat))
+cm <- table(Observed = test$y, Predicted = pred_cost)
+cm_labeled <- format_cm(cm)
 kable(
-  cm_df,
-  caption = "Confusion matrix using custom loss matrix (rows = Observed, columns = Predicted)"
+  cm_labeled,
+  caption = "Confusion matrix for optimal tree on test data using custom loss matrix"
 )
-calculate_metrics(pred_test_loss, test, cm_loss)
+metrics_custom_loss <- calculate_metrics(pred_cost, test, cm)
 ```
 As could be expected, when using a custom loss function that penalizes false negatives more harshly than false positives, we are seeing fewer false negatives than before. It results in a higher recall of the model and a higher F1 score at the expense of lower precision and accuracy.
 
 ### Task 6
 
-```{r t2_6}
+```{r t2_6, echo=FALSE}
 library(dplyr)
 
-prob_yes_tree <- predict(tree_opt, newdata = test, type = "prob")[, "yes"]
+prob_yes_tree <- pred_test_prob[, "yes"]
 
 # Fit logistic regression (binomial GLM with logit link)
 logit_fit <- glm(
@@ -546,15 +501,15 @@ metrics_at_threshold <- function(thresh, y_true, p_yes) {
   pred_yes <- p_yes > thresh
   y_pos    <- y_true == "yes"
   y_neg    <- y_true == "no"
-  
+
   tp <- sum(pred_yes & y_pos)
   fp <- sum(pred_yes & y_neg)
   fn <- sum(!pred_yes & y_pos)
   tn <- sum(!pred_yes & y_neg)
-  
+
   tpr <- ifelse(tp + fn == 0, NA, tp / (tp + fn)) # sensitivity/recall
   fpr <- ifelse(fp + tn == 0, NA, fp / (fp + tn))
-  
+
   c(threshold = thresh, TPR = tpr, FPR = fpr)
 }
 
@@ -572,37 +527,39 @@ roc_logit <- as.data.frame(
 plot(roc_tree$FPR, roc_tree$TPR, type = "b", pch = 19, col = "blue",
      xlab = "False Positive Rate (FPR)",
      ylab = "True Positive Rate (TPR)",
-     main = "ROC curves: tree_opt vs logistic regression",
+     main = "ROC curves: optimal tree vs logistic regression",
      xlim = c(0, 1), ylim = c(0, 1))
 
 lines(roc_logit$FPR, roc_logit$TPR, type = "b", pch = 17, col = "red")
 
 abline(0, 1, lty = 2, col = "grey")
 legend("bottomright",
-       legend = c("Tree (tree_opt)", "Logistic regression"),
+       legend = c("Tree (optimal)", "Logistic regression"),
        col    = c("blue", "red"),
        pch    = c(19, 17),
        bty    = "n")
 ```
-The ROC plot shows that, while both models are clearly better than random (their curves lie well above the diagonal), the logistic regression curve (red) is consistently above or equal to the tree curve (blue), so for almost every operating point it achieves a higher TPR for the same FPR, i.e. it dominates the tree in ROC space. This suggests that, as probabilistic classifiers, the logistic regression model has better overall ability to separate “yes” from “no” than the optimal tree.
+
+
+The ROC plot shows that both models are clearly better than random (their curves lie well above the diagonal) and achieve similar ratios of FPR to TPR for most probability thresholds, with the tree model lying slightly above the logistic regression model and therefore slightly outperforming it for some probability thresholds.
 
 At the same time, it should be noted that ROC curves treat TPR and FPR symmetrically and do not depend on class prevalence, so a model can look good in ROC space even when the positive class is very rare and performance on that class is mediocre. By contrast, precision–recall (PR) curves focus only on the positive class with the recall being equal to the TPR and the precision showing the fraction of predicted “yes” that are truly “yes”.
 
-In our case, where we observe a significant imbalance between "yes" and "no" responses (with "nO" responses accounting for about 89% of the data), the precision-recall curve is indeed a better choice than relying on ROC alone as it will give a clearer view of how well each model retrieves the “yes” class at acceptable false‑alert rates.
+In our case, where we observe a significant imbalance between "yes" and "no" responses (with "no" responses accounting for about 89% of the data), the precision-recall curve is indeed a better choice than relying on ROC alone as it will give a clearer view of how well each model retrieves the “yes” class at acceptable false‑alert rates.
 
-```{r t2_6_1}
+```{r t2_6_1, echo=FALSE}
 pr_at_threshold <- function(thresh, y_true, p_yes) {
   pred_yes <- p_yes > thresh
   y_pos    <- y_true == "yes"
   y_neg    <- y_true == "no"
-  
+
   tp <- sum(pred_yes & y_pos)
   fp <- sum(pred_yes & y_neg)
   fn <- sum(!pred_yes & y_pos)
-  
+
   precision <- ifelse(tp + fp == 0, NA, tp / (tp + fp))
   recall    <- ifelse(tp + fn == 0, NA, tp / (tp + fn))  # = TPR
-  
+
   c(threshold = thresh, Precision = precision, Recall = recall)
 }
 
@@ -621,12 +578,12 @@ plot(pr_tree$Recall, pr_tree$Precision, type = "b", pch = 19, col = "blue",
      xlab = "Recall",
      ylab = "Precision",
      xlim = c(0, 1), ylim = c(0, 1),
-     main = "Precision–Recall curves: tree_opt vs logistic regression")
+     main = "Precision–Recall curves: optimal tree vs logistic regression")
 
 lines(pr_logit$Recall, pr_logit$Precision, type = "b", pch = 17, col = "red")
 
 legend("topright",
-       legend = c("Tree (tree_opt)", "Logistic regression"),
+       legend = c("Tree (optimal)", "Logistic regression"),
        col    = c("blue", "red"),
        pch    = c(19, 17),
        bty    = "n")
@@ -639,7 +596,7 @@ text(pr_logit$Recall, pr_logit$Precision,
      labels = round(pr_logit$threshold, 2),
      pos = 4, cex = 0.6, col = "red")
 ```
-The precision-recall curve shown above demonstrates that by lowering the cutoff probability, we can achieve higher recall at the expense of lower precision and vice versa depending on the business goals. 
+The precision-recall curve shown above demonstrates that by lowering the cutoff probability, we can achieve higher recall at the expense of lower precision and vice versa depending on the business goals. In this particular case, we can to expect the bank to prioritize higher recall as the cost of a missed business opportunity (a false negative) is significantly higher than the cost of an operator making a few additional phone calls that don't result in a new subscription (a false positive).
 
 
 ## Assignment 3. Principal components and implicit regularization
