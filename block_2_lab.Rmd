@@ -1,10 +1,8 @@
 ---
-title: "lab_block_2"
-author: "Aron, Sergey, Shahin"
-date: "2025-11-14"
-output:
-  html_document:
-    df_print: paged
+title: "Lab Block 2 (revision 1)"
+author: "Group B13: Aron(aroen488), Sergey(servo519), Shahin(mdpa888)"
+date: "2026-01-18"
+output: pdf_document
 ---
 
 ```{r setup, include=FALSE}
@@ -26,6 +24,7 @@ Theory questions: Q1: Aron, Q2: Sergey, Q3: Shahin.
 Formatting the report was done by Sergey.
 
 # Assignment 1. ENSEMBLE METHODS
+
 
 ```{r echo = FALSE}
 
@@ -116,7 +115,9 @@ random_forest_sim <- function(NS = 25, condition = function(x1, x2){
 ```
 
 # Simulating for 3 different conditions
+
 The condition for Y is x1 < x2.
+
 ```{r echo = FALSE}
 
 
@@ -129,6 +130,7 @@ rf1 %>% round(4)
 
 
 The condition for Y is x1 < 0.5.
+
 ```{r echo = FALSE}
 
 # x1 < 0.5

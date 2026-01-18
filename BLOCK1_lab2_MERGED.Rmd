@@ -1,7 +1,7 @@
 ---
-title: "Block 1 Lab 2 report"
+title: "Block 1 Lab 2 (revision 1)"
 author: 'Group B13: Aron(aroen488), Sergey(servo519), Shahin(mdpa888)'
-date: "2025-11-26"
+date: "2026-01-18"
 output: pdf_document
 ---
 
